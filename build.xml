@@ -1,0 +1,61 @@
+<project default="prepare" basedir="." name="TinySPOTComm_prepare">
+
+    <property file="${user.home}/.sunspot.properties"/>
+    <import file="${sunspot.home}/build.xml"/>
+
+    <target name="prepare">
+
+	<echo message="Compiling spotlib"/>
+	<exec executable="ant" dir="TinySPOTComm_spotlib_mods" osfamily="unix">
+	    <arg value="jar-app"/>
+	</exec>
+	<exec executable="ant.bat" dir="TinySPOTComm_spotlib_mods" osfamily="windows">
+	    <arg value="jar-app"/>
+	</exec>
+	
+
+	<echo message="Compiling multihop"/>
+	<exec executable="ant" dir="TinySPOTComm_multihop_mods" osfamily="unix">
+	    <arg value="jar-app"/>
+	</exec>
+	<exec executable="ant.bat" dir="TinySPOTComm_multihop_mods" osfamily="windows">
+	    <arg value="jar-app"/>
+	</exec>
+
+	<exec executable="ant" dir="." osfamily="unix">
+	    <arg value="library" />
+	</exec>
+	<exec executable="ant.bat" dir="." osfamily="windows">
+	    <arg value="library" />
+	</exec>
+
+    </target>
+    
+    <target name="clean">
+	<echo message="Cleaning spotlib"/>
+	<exec executable="ant" dir="TinySPOTComm_spotlib_mods" osfamily="unix">
+	    <arg value="clean"/>
+	</exec>
+	<exec executable="ant.bat" dir="TinySPOTComm_spotlib_mods" osfamily="windows">
+	    <arg value="clean"/>
+	</exec>
+
+	<echo message="Cleaning multihop"/>
+	<exec executable="ant" dir="TinySPOTComm_multihop_mods" osfamily="unix">
+	    <arg value="clean"/>
+	</exec>
+	<exec executable="ant.bat" dir="TinySPOTComm_multihop_mods" osfamily="windows">
+	    <arg value="clean"/>
+	</exec>
+
+	<exec executable="ant" dir="." osfamily="unix">
+	    <arg value="library" />
+	</exec>
+	<exec executable="ant.bat" dir="." osfamily="windows">
+	    <arg value="library" />
+	</exec>
+
+    
+    </target>
+    
+</project>

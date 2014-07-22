@@ -1,0 +1,27 @@
+<project name="TinySPOTComm_spotlib_mods" default="help" basedir=".">
+
+    <property name="user.properties.file" value="build.properties"/>
+    <property name="src.dir" value="src"/>
+    <property file="${user.home}/.sunspot.properties"/>
+    <import file="${sunspot.home}/build.xml"/>
+
+    <target name="-do-jar-app" depends="-check-for-manifest">
+        <echo message="creating spotlib_common.jar"/>
+        <delete file="${sunspot.lib}/spotlib_common.jar"/>
+        <jar destfile="${sunspot.lib}/spotlib_common.jar"
+		basedir="./j2meclasses"
+		excludesfile="device-class-patterns.txt"/>
+        <echo message="creating spotlib_device.jar"/>
+        <delete file="${sunspot.lib}/spotlib_device.jar"/>
+        <jar destfile="${sunspot.lib}/spotlib_device.jar"
+    		basedir="./j2meclasses"
+		includesfile="device-class-patterns.txt"
+		manifest="${manifest.name}"/>
+    </target>
+    <target name="-pre-clean">
+        <echo message="Restoring spotlib_common.jar"/>
+        <copy file="orig/spotlib_common.jar" tofile="${sunspot.lib}/spotlib_common.jar" overwrite="true" />
+        <echo message="Restoring spotlib_device.jar"/>	    
+        <copy file="orig/spotlib_device.jar" tofile="${sunspot.lib}/spotlib_device.jar" overwrite="true" />
+    </target>
+</project>

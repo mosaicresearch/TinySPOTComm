@@ -1,0 +1,6 @@
+COMPONENT=TinySPOTCommDemoAppC
+
+include $(MAKERULES)
+
+        
+
