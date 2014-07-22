@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2007-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -27,36 +27,88 @@ package com.sun.spot.peripheral.ota;
 import com.sun.spot.service.IService;
 import java.util.Date;
 
+/**
+ * Defines constants used by Over-the-air command sessions.
+ */
 public interface IOTACommandServer extends IService {
 
 	/**
-	 * The radiostream port on which to listen for hosts connecting
+	 * The default port on which to listen for hosts connecting
 	 */
-	int PORT = 8;
+	public static final int DEFAULT_DATAGRAM_PORT = 8;
 	
+	/**
+	 * The default port for stream command connections
+	 */
+	public static final int DEFAULT_STREAM_PORT = 8;
+
+	/**
+	 * The default datagram protocol to use
+	 */
+	public static final String DEFAULT_DATAGRAM_PROTOCOL = "radiogram";
+
+	/**
+	 * The default stream protocol to use
+	 */
+	public static final String DEFAULT_STREAM_PROTOCOL = "radiostream";
+
 	/**
 	 * Command that we recognise to start a new session
 	 */
-	String START_OTA_SESSION_CMD = "START_OTA_SESSION_CMD";
+	public static final String START_OTA_SESSION_CMD = "START_OTA_SESSION_CMD";
 	
 	/**
 	 * Command to respond information about the SPOT 
 	 */
-	String HELLO_CMD = "HELLO_CMD";
+	public static final String HELLO_CMD = "HELLO_CMD";
 
 	/**
 	 * Version of the {@link #HELLO_CMD} that we support 
 	 */
-	int HELLO_COMMAND_VERSION = 2;
+	public static final int HELLO_COMMAND_MAJOR_VERSION = 3;
         
 	/**
 	 * Starting with (major) version 2, we support major/minor version
 	 * numbering. This lets us signal/detect changes that are backward
 	 * compatible and those that aren't.
 	 */
-	int HELLO_COMMAND_MINOR_VERSION = 2;
-	
-	/**
+	public static final int HELLO_COMMAND_MINOR_VERSION = 1;
+
+    public static final byte BASIC_HELLO_TYPE = 0;
+    public static final byte PHYSICAL_NEIGHBORS_HELLO_TYPE  = 1;
+
+    /**
+     * SPOT device type
+     */
+    public static final byte SPOT_TYPE = 1;
+
+    /**
+     * eSPOT device subtype
+     */
+    public static final byte ESPOT_SUBTYPE = 1;
+
+    /**
+     * virtual eSPOT device subtype
+     */
+    public static final byte VIRTUAL_ESPOT_SUBTYPE = 2;
+
+
+    /**
+     * Host application device type
+     */
+    public static final byte HOST_APP_TYPE = 2;
+
+    /**
+     * generic host app subtype
+     */
+    public static final byte GENERIC_HOST_APP_SUBTYPE = 1;
+
+    /**
+     * shared basestation host app subtype
+     */
+    public static final byte SHARED_BASESTATION_SUBTYPE = 2;
+
+    /**
 	 * Major version of the eSPOT hardware to report in response to {@link #HELLO_CMD}
 	 */
 	int HARDWARE_MAJOR_REV_ESPOT = 0;
@@ -92,4 +144,18 @@ public interface IOTACommandServer extends IService {
 	 */
 	Date timeOfLastMessageFromHost();
 
+    /**
+     * Set the device subtype for the Hello command.
+     *
+     * @param subtype specify the type of SPOT this is
+     */
+    void setSubType(byte subtype);
+
+    /**
+     * Get the device subtype for the Hello command.
+     *
+     * @return the type of SPOT this is
+     */
+    byte getSubType();
+    
 }

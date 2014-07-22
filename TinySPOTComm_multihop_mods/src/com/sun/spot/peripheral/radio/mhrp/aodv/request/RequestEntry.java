@@ -31,7 +31,7 @@ import com.sun.spot.peripheral.radio.routing.interfaces.RouteEventClient;
  * @author Allen Ajit George
  * @version 0.1
  */
-class RequestEntry implements Comparable {
+public class RequestEntry implements Comparable {
     
     public Long key;
     public int requestID;

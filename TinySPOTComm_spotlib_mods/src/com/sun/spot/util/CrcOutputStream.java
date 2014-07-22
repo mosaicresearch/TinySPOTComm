@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2007-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -24,6 +24,7 @@
 
 package com.sun.spot.util;
 
+import com.sun.spot.peripheral.TimeoutException;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -131,8 +132,11 @@ public class CrcOutputStream extends OutputStream {
 	 * @see java.io.OutputStream#close()
 	 */
 	public void close() throws IOException {
-		flush();
-		outData.close();
+        try {
+            flush();
+        } finally {
+            outData.close();
+        }
 	}
 
 
@@ -176,13 +180,21 @@ public class CrcOutputStream extends OutputStream {
 			Utils.writeBigEndInt(buffer, 0, byteCount);
 			crc = CRC.crc(buffer, 4, byteCount) & 0xFFFF;
 			Utils.writeBigEndShort(buffer, byteCount+4, crc);
-			outData.write(buffer, 0, byteCount+PROTOCOL_OVERHEAD);
-			outData.flush();
-			byteCount = 0;
+            try {
+                outData.write(buffer, 0, byteCount + PROTOCOL_OVERHEAD);
+                outData.flush();
+            } finally {
+                byteCount = 0;
+            }
 		}
-		int ackValue = inputStream.getAck();
-		if (crc != ackValue) {
-			throw new IOException("Received incorrect CRC ack of 0x" + Integer.toHexString(ackValue) + " (expected 0x" + Integer.toHexString(crc) + ")");
-		}
+        try {
+            int ackValue = inputStream.getAck();
+            if (crc != ackValue) {
+                throw new IOException("Received incorrect CRC ack of 0x" + Integer.toHexString(ackValue) + " (expected 0x" + Integer.toHexString(crc) + ")");
+            }
+        } catch (TimeoutException ex) {
+            throw new IOException("CrcOutputStream received timeout while waiting for Ack");
+        }
+
 	}
 }

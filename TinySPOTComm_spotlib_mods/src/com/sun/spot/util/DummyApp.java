@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2007-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -27,29 +27,35 @@ package com.sun.spot.util;
 import java.io.IOException;
 
 import com.sun.spot.peripheral.Spot;
+import com.sun.spot.peripheral.ota.OTACommandServer;
+import com.sun.spot.service.Heartbeat;
 
 /**
- * This class implements an empty application that can be useful when there is no valid application installed
+ * This class implements an empty application that can be useful when 
+ * there is no valid application installed.
  */
 public class DummyApp {
 
-	/**
-	 * A main method that allows this class to be used as a startup class
-	 * 	 
-	 * @throws IOException 
-	 */
-	public static void main(String[] args) throws IOException {
-		new DummyApp().runIt();
-	}
-	
-	private void runIt() {
+    /**
+     * A main method that allows this class to be used as a startup class
+     * 	 
+     * @throws IOException 
+     */
+    public static void main(String[] args) throws IOException {
+        new DummyApp().runIt();
+    }
+
+    private void runIt() {
         System.out.println("Running dummy application...");
+        new BootloaderListener().start();
+        new Heartbeat(10000, 3300).start();
         Spot.getInstance().getSleepManager().disableDeepSleep();
+        OTACommandServer.getInstance().start();
         synchronized (this) {
-        	try {
-        		wait();
-        	} catch (InterruptedException e) {
-        	}
-		}
-	}
+            try {
+                wait();
+            } catch (InterruptedException e) {
+            }
+        }
+    }
 }

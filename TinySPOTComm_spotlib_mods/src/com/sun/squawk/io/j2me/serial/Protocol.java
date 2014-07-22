@@ -73,6 +73,7 @@ public class Protocol extends ConnectionBase implements StreamConnection {
 	private static final String URL_USB = "//usb";
 	private static final String URL_USART = "//usart";
 	public static final int USART0_BASE_ADDRESS = 	0xfffc0000;
+	public static final int USART1_BASE_ADDRESS = 	0xfffc4000;
 	public static final int US_BRGR = 				0x20 >> 2;
 	public static final int US_MR = 				0x04 >> 2;
 
@@ -203,7 +204,7 @@ public class Protocol extends ConnectionBase implements StreamConnection {
 				int requestedRate = Integer.parseInt(p.getProperty(key));
 				int requiredClockDivisor = (2 * ISpot.MCLK_FREQUENCY / (16 * requestedRate) + 1) / 2;
 				Unsafe.setInt(Address.fromPrimitive(USART0_BASE_ADDRESS), US_BRGR, requiredClockDivisor);
-				
+				Unsafe.setInt(Address.fromPrimitive(USART1_BASE_ADDRESS), US_BRGR, requiredClockDivisor);
 			} else if (key.equalsIgnoreCase("databits")) {
 				int requestedDatabits = Integer.parseInt(p.getProperty(key));
 				mode &= ~(0x3 << 6);
@@ -236,7 +237,7 @@ public class Protocol extends ConnectionBase implements StreamConnection {
 			}
 		}
 		Unsafe.setInt(Address.fromPrimitive(USART0_BASE_ADDRESS), US_MR, mode);
-		
+		Unsafe.setInt(Address.fromPrimitive(USART1_BASE_ADDRESS), US_MR, mode);
 	}
 
 	public InputStream openInputStream() throws IOException {

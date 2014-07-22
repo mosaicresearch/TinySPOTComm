@@ -40,6 +40,9 @@ import com.sun.spot.peripheral.ConfigPage;
 import com.sun.spot.peripheral.ILed;
 import com.sun.spot.peripheral.IPowerController;
 import com.sun.spot.peripheral.ISpot;
+import com.sun.spot.service.IService;
+import com.sun.spot.service.ISpotBlink;
+import com.sun.spot.service.ServiceRegistry;
 import com.sun.spot.util.IEEEAddress;
 import com.sun.spot.util.Properties;
 import com.sun.spot.util.Utils;
@@ -108,9 +111,10 @@ class OTADefaultCommands extends Thread implements ISpotAdminConstants, IOTAComm
 
 	private void processBlinkCmd(DataInputStream params, IOTACommandHelper helper) throws IOException {
 		int duration = params.readInt();
-		ILed redLED = spot.getRedLed();
-		ILed greenLED = spot.getGreenLed();
-		new Thread(new LEDBlinker(new ILed[] {redLED, greenLED}, duration), "LED blinker").start();
+        IService s [] = ServiceRegistry.getInstance().lookupAll(ISpotBlink.class);
+        for (int i = 0; i < s.length; i++) {
+            ((ISpotBlink)s[i]).blink(duration);
+        }
 		helper.sendPrompt();
 	}
 
@@ -293,11 +297,19 @@ class OTADefaultCommands extends Thread implements ISpotAdminConstants, IOTAComm
 		helper.sendPrompt();
 	}
 
-	private void processGetConfigPageCmd(IOTACommandHelper helper) throws IOException {
+	private void processGetConfigPageCmd(IOTACommandHelper helper, boolean len) throws IOException {
 		ConfigPage configPage;
 		configPage = spot.getConfigPage();
 		byte[] data = configPage.asByteArray();
-		helper.getDataOutputStream().write(data);
+        if (len) {
+            int i = data.length - 1;
+            while (i > 0 && data[i] == 0) i--;
+            i = i / 4;
+            helper.getDataOutputStream().writeByte(i & 0xff);
+            helper.getDataOutputStream().write(data, 0, (i + 1) * 4);
+        } else {
+            helper.getDataOutputStream().write(data);
+        }
 		helper.sendPrompt();
 	}
 
@@ -333,31 +345,6 @@ class OTADefaultCommands extends Thread implements ISpotAdminConstants, IOTAComm
 		dataOutputStream.flush();
 	}
 
-	public class LEDBlinker implements Runnable {
-
-		private static final int CYCLE_TIME_MILLIS = 500;
-		private ILed[] leds;
-		private int blinkCount;
-
-		public LEDBlinker(ILed[] leds, int durationSecs) {
-			this.leds = leds;
-			this.blinkCount = durationSecs * 1000 / CYCLE_TIME_MILLIS;
-		}
-
-		public void run() {
-			for (int i = 0; i < blinkCount; i++) {
-				for (int j = 0; j < leds.length; j++) {
-					leds[j].setOn();
-				}
-				Utils.sleep(CYCLE_TIME_MILLIS/2);
-				for (int j = 0; j < leds.length; j++) {
-					leds[j].setOff();
-				}
-				Utils.sleep(CYCLE_TIME_MILLIS/2);
-			}
-		}
-	}
-
 	public void configureCommands(IOTACommandRepository repository) {
 		repository.addCommand(SET_TIME_CMD, new ExtensionWrapper(SECURITY_LEVEL_SETTIME) {
 			public void processCommand(DataInputStream params, IOTACommandHelper helper) throws IOException { processSetTimeCmd(params, helper); }
@@ -372,7 +359,10 @@ class OTADefaultCommands extends Thread implements ISpotAdminConstants, IOTAComm
 			public void processCommand(DataInputStream params, IOTACommandHelper helper) throws IOException { processBlinkCmd(params, helper); }
 		});
 		repository.addCommand(GET_CONFIG_PAGE_CMD, new ExtensionWrapper(SECURITY_LEVEL_GETCONFIGPAGE) {
-			public void processCommand(DataInputStream params, IOTACommandHelper helper) throws IOException { processGetConfigPageCmd(helper); }
+			public void processCommand(DataInputStream params, IOTACommandHelper helper) throws IOException { processGetConfigPageCmd(helper, false); }
+		});
+		repository.addCommand(GET_CONFIG_PAGE_LEN_CMD, new ExtensionWrapper(SECURITY_LEVEL_GETCONFIGPAGE) {
+			public void processCommand(DataInputStream params, IOTACommandHelper helper) throws IOException { processGetConfigPageCmd(helper, true); }
 		});
 		repository.addCommand(GET_FILE_INFO_CMD, new ExtensionWrapper(SECURITY_LEVEL_GETFILEINFO) {
 			public void processCommand(DataInputStream params, IOTACommandHelper helper) throws IOException { processGetFileInfoCmd(params, helper); }
@@ -431,6 +421,9 @@ class OTADefaultCommands extends Thread implements ISpotAdminConstants, IOTAComm
 		repository.addCommand(SpotWorldCommand.MIGRATE_APP_CMD, swcmd);
 		repository.addCommand(SpotWorldCommand.RECEIVE_APP_CMD, swcmd);
 		repository.addCommand(SpotWorldCommand.GET_SPOT_PROPERTY_CMD, swcmd);
+		repository.addCommand(SpotWorldCommand.REMOTE_GET_PHYS_NBRS_CMD, swcmd);
+		repository.addCommand(SpotWorldCommand.GET_RADIO_INFO_CMD, swcmd);
+		repository.addCommand(SpotWorldCommand.GET_ROUTE_CMD, swcmd);
 	}
 
 	private abstract class ExtensionWrapper implements IOTACommand {

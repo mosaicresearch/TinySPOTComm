@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -45,10 +45,10 @@ public class ConnectionID implements IConnectionID {
 	 */
 	byte portNo;
         
-        /**
-         * The maximum number of hops a message will make 0=no forwarding
-         */
-        private byte maxBroadcastHops;
+    /**
+     * The maximum number of hops a message will make 0=no forwarding
+     */
+    private byte maxBroadcastHops;
 	
 	public ConnectionID(){
 	}
@@ -126,9 +126,9 @@ public class ConnectionID implements IConnectionID {
 		} else if (isBroadcast()) {
 			name = "Broadcast on port " + (portNo & 0xFF);
 		} else if (isInput()) {
-			name = "Input from " + new IEEEAddress(macAddress) + " on port " + (portNo & 0xFF);
+			name = "Input from " + IEEEAddress.toDottedHex(macAddress) + " on port " + (portNo & 0xFF);
 		} else {
-			name = "Output to " + new IEEEAddress(macAddress) + " on port " + (portNo & 0xFF);
+			name = "Output to " + IEEEAddress.toDottedHex(macAddress) + " on port " + (portNo & 0xFF);
 		}
 		return name;
 	}

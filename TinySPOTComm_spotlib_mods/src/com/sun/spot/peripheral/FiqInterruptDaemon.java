@@ -56,13 +56,13 @@ public class FiqInterruptDaemon implements Runnable, IDriver, IFiqInterruptDaemo
 		this.powerController = powerController;
 		this.alarmHandler = new NullEventHandler("Alarm event ignored");
 		this.buttonHandler = new StopVMEventHandler();
-		this.powerOffHandler = new NullEventHandler("");
+		this.powerOffHandler = new NullEventHandler("Power off");
 		this.lowBatteryHandler = new NullEventHandler("Low battery");
 		this.externalPowerHandler = new NullEventHandler("External power applied");
 	}
 
 	public void startThreads() {
-		Thread thread = new Thread(this);
+		Thread thread = new Thread(this, "Fiq Interrupt Daemon");
 		VM.setAsDaemonThread(thread);
 		VM.setSystemThreadPriority(thread, VM.MAX_SYS_PRIORITY);
 		thread.start();
@@ -92,8 +92,6 @@ public class FiqInterruptDaemon implements Runnable, IDriver, IFiqInterruptDaemo
 		 	"FIQ interrupt handler return from deep sleep");
 		VM.setAsDaemonThread(returnFromDeepSleepThread);
 		returnFromDeepSleepThread.start();
-
-		Spot.getInstance().getDriverRegistry().add(this);
 	}
 
 	public void run() {
@@ -101,6 +99,7 @@ public class FiqInterruptDaemon implements Runnable, IDriver, IFiqInterruptDaemo
 		handlePowerControllerStatusChange();
 
 		initFiq();
+		Spot.getInstance().getDriverRegistry().add(this);
 		while (true) {
 			try {
 				VM.waitForInterrupt(IAT91_Peripherals.FIQ_ID_MASK);

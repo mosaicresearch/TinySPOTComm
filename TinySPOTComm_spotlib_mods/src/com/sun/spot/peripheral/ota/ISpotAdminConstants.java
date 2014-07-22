@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2007-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -43,6 +43,7 @@ public interface ISpotAdminConstants {
 	public static final String BLINK_CMD				= "DEF-BL";
 
 	public static final String GET_CONFIG_PAGE_CMD		= "DEF-GC";
+	public static final String GET_CONFIG_PAGE_LEN_CMD	= "DEF-GCN";
 	public static final String GET_SYSTEM_PROPERTIES    = "DEF-GS";
 	public static final String GET_FILE_LIST_CMD		= "DEF-GL";
 	public static final String GET_FILE_INFO_CMD		= "DEF-GF";
@@ -52,22 +53,26 @@ public interface ISpotAdminConstants {
 	public static final String SET_PUBLIC_KEY_CMD	    = "DEF-SP";
 	public static final String SET_STARTUP_CMD	    	= "DEF-SU";
 
-	public static final String GET_MEMORY_STATS_CMD = "SW-GMS";
-	public static final String GET_POWER_STATS_CMD = "SW-GPS";
-	public static final String GET_SLEEP_INFO_CMD = "SW-GSI";
+    public static final String GET_MEMORY_STATS_CMD     = "SW-GMS";
+	public static final String GET_POWER_STATS_CMD      = "SW-GPS";
+	public static final String GET_SLEEP_INFO_CMD       = "SW-GSI";
 	public static final String GET_AVAILABLE_SUITES_CMD = "SW-GAS";
-	public static final String GET_SUITE_MANIFEST_CMD = "SW-GWM";
-	public static final String START_APP_CMD = "SW-SAP";
-	public static final String PAUSE_APP_CMD = "SW-PAP";
-	public static final String RESUME_APP_CMD = "SW-RAP";
-	public static final String STOP_APP_CMD = "SW-STA";
-	public static final String GET_APP_STATUS_CMD = "SW-APS";
-	public static final String GET_ALL_APPS_STATUS_CMD = "SW-AAP";
+	public static final String GET_SUITE_MANIFEST_CMD   = "SW-GWM";
+	public static final String START_APP_CMD            = "SW-SAP";
+	public static final String PAUSE_APP_CMD            = "SW-PAP";
+	public static final String RESUME_APP_CMD           = "SW-RAP";
+	public static final String STOP_APP_CMD             = "SW-STA";
+	public static final String GET_APP_STATUS_CMD       = "SW-APS";
+	public static final String GET_ALL_APPS_STATUS_CMD  = "SW-AAP";
 	public static final String START_REMOTE_PRINTING_CMD = "SW-SRP";
 	public static final String STOP_REMOTE_PRINTING_CMD = "SW-STP";
-	public static final String RECEIVE_APP_CMD = "SW-REA";
-	public static final String MIGRATE_APP_CMD = "SW-MIA";
-	public static final String GET_SPOT_PROPERTY_CMD = "SW-GSP";
+	public static final String RECEIVE_APP_CMD          = "SW-REA";
+	public static final String MIGRATE_APP_CMD          = "SW-MIA";
+	public static final String GET_SPOT_PROPERTY_CMD    = "SW-GSP";
+	public static final String REMOTE_GET_PHYS_NBRS_CMD = "SW-RPN";
+	public static final String GET_RADIO_INFO_CMD       = "SW-GRI";
+	public static final String SET_RADIO_INFO_CMD       = "SW-SRI";
+	public static final String GET_ROUTE_CMD            = "SW-GRT";
 	
 	public static final String BOOTLOADER_CMD_HEADER = "*EL*";
 	public static final String ABORT_REQUEST = BOOTLOADER_CMD_HEADER + ":A";

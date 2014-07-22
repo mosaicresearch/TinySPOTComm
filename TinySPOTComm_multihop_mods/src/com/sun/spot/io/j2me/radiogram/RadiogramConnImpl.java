@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -96,7 +96,7 @@ public class RadiogramConnImpl extends RadioConnectionBase implements RadiogramC
                                 sendConnectionID.setMaxBroadcastHops(ILowPan.DEFAULT_HOPS);
 				receiveConnectionID = null;
 			} else {
-				long macAddress = new IEEEAddress(addr).asLong();
+				long macAddress = IEEEAddress.toLong(addr);
 				sendConnectionID = getProtocolManager().addOutputConnection(macAddress, portNo);
 				receiveConnectionID = getProtocolManager().addInputConnection(macAddress, portNo);
 			}

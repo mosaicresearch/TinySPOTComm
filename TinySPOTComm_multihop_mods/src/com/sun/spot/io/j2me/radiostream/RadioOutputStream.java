@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -103,22 +103,9 @@ public class RadioOutputStream extends OutputStream implements IRadioControl {
 	}
 
 	private void sendPayload() throws NoMeshLayerAckException, NoAckException, ChannelBusyException, NoRouteException {
-		try {
-			protMgr.send(connectionID, connectionID.getMacAddress(), payload, payloadIndex);
-		} catch (NoAckException e) {
-			// make sure we reset the packet
-			payloadIndex = IRadiostreamProtocolManager.DATA_OFFSET;
-			throw e;
-		} catch (ChannelBusyException e) {
-			// make sure we reset the packet
-			payloadIndex = IRadiostreamProtocolManager.DATA_OFFSET;
-			throw e;
-		} catch (NoRouteException e) {
-			// make sure we reset the packet
-			payloadIndex = IRadiostreamProtocolManager.DATA_OFFSET;
-			throw e;
-		}
-		payloadIndex = IRadiostreamProtocolManager.DATA_OFFSET;
+		int len = payloadIndex;
+        payloadIndex = IRadiostreamProtocolManager.DATA_OFFSET; // reset the packet
+        protMgr.send(connectionID, connectionID.getMacAddress(), payload, len);
 	}
 
 	/* (non-Javadoc)

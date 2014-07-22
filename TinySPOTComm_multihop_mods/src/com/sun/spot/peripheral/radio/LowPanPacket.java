@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2007-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -784,9 +784,9 @@ public class LowPanPacket {
     public String toString() {
         StringBuffer sb = new StringBuffer(150);
         sb.append("LPP orig: ");
-        sb.append(new IEEEAddress(getOriginatorAddress()).asDottedHex());
+        sb.append(IEEEAddress.toDottedHex(getOriginatorAddress()));
         sb.append(" fdest: ");
-        sb.append(new IEEEAddress(getFDestinationAddress()).asDottedHex());
+        sb.append(IEEEAddress.toDottedHex(getFDestinationAddress()));
         sb.append(" hopsLeft: ");
         sb.append(getHopsLeft());
         sb.append(" ");

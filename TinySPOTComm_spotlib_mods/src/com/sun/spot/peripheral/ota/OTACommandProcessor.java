@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -54,22 +54,13 @@ import com.sun.spot.util.Utils;
 import com.sun.squawk.Isolate;
 import com.sun.squawk.VM;
 import com.sun.squawk.security.verifier.SignatureVerifierException;
+import javax.microedition.io.Connection;
 
 /**
- * This class monitors radiogram communications on port number
- * 8, and responds to commands received. These commands allow flashing the
+ * This class monitors radiostream communications on port number 8 during an OTA
+ * session, and responds to commands received. These commands allow flashing the
  * Spot's config page and/or applications remotely, retrieving the config page
- * contents, and restarting the Spot.<br>
- * <br>
- * Applications should never need to create an OTACommandServer explicitly.
- * OTA is enabled or disabled for a SPOT using the ant command line facility.
- * <br>
- * To get access to the OTACommandServer use Spot.getInstance().getOTACommandServer()
- * <br>
- * See {@link IOTACommandServerListener} if you want to run an application in a
- * separate thread concurrently with OTACommandServer, and you need to respond
- * (for example, suspending) when flash operations start.<br>
- * <br>
+ * contents, and restarting the Spot.
  */
 class OTACommandProcessor extends Thread implements ISpotAdminConstants, IOTACommandProcessor, IOTACommandHelper, IOTACommandRepository {
 
@@ -85,6 +76,7 @@ class OTACommandProcessor extends Thread implements ISpotAdminConstants, IOTACom
 	private boolean suspended = false;
 	private boolean isRemote = true;
 	private long timeOfLastCommunication = 0;
+    private long startTime = 0;
 	private DataInputStream dataInputStream;
 	private DataOutputStream dataOutputStream;
 	private int flashedByteCount;
@@ -132,6 +124,7 @@ class OTACommandProcessor extends Thread implements ISpotAdminConstants, IOTACom
 		super("OTACommandProcessor thread");
 		this.hostAddress = hostAddress;
 		this.spot = spot;
+        startTime = System.currentTimeMillis();
 		OTADefaultCommands defaultCommandsProcessor = new OTADefaultCommands(hostAddress, powerController, spot, remotePrintManager);
 		defaultCommandsProcessor.configureCommands(this);
 		Enumeration commandNames = commands.keys();
@@ -187,7 +180,7 @@ class OTACommandProcessor extends Thread implements ISpotAdminConstants, IOTACom
 	public void run() {
 		try {
 			sendPrompt();
-			while (true) {
+			while (!closed) {
 				byte[] cmd = null;
 				try {
 					cmd = getCommand();
@@ -209,18 +202,24 @@ class OTACommandProcessor extends Thread implements ISpotAdminConstants, IOTACom
 					}
 					if (!suspended) {
 						timeOfLastCommunication  = System.currentTimeMillis();
-						if (!processCommand(cmd))
+						if (!processCommand(cmd)) {
 							break;
+                        }
 					} else {
 						sendErrorDetails("OTACommandServer is suspended");
 					}
 				} catch (SignatureVerifierException e) {
-					System.err.println("[OTACommandProcessor] Got verification failure while processing command: ");					e.printStackTrace();
+					Utils.log("[OTACommandProcessor] Got verification failure while processing command: ");					e.printStackTrace();
 					sendErrorDetails(ERROR_COMMAND_VERIFICATION_FAILED, e.getMessage());
+				} catch (IOException e) {
+					Utils.log("[OTACommandProcessor] Got IOException while processing command: " + e.getMessage());
+                    break;      // an IOException probably means a problem communicating with host,
+                                // so don't compound matters by trying to report an error via radio
 				} catch (Throwable e) {
-					System.err.println("[OTACommandProcessor] Got exception while processing command: ");
+					Utils.log("[OTACommandProcessor] Got exception while processing command: ");
 					e.printStackTrace();
-					sendErrorDetails(e.getMessage());
+					sendErrorDetails("Error while processing command: " + e.getMessage());
+                    break;
 				} finally {
 					conn.setRadioPolicy(RadioPolicy.AUTOMATIC);
 				}
@@ -234,17 +233,26 @@ class OTACommandProcessor extends Thread implements ISpotAdminConstants, IOTACom
 	}
 
 	public synchronized void closedown() {
-		try {
-			if (!closed) {
-				closed = true;
-				dataInputStream.close();
-				dataOutputStream.close();
-			}
-		} catch (IOException e) {
-			System.err.println("[OTACommandProcessor] Got an error closing session: ");
-			e.printStackTrace();
-		}
-			
+        if (!closed) {
+            closed = true;
+            try {
+                dataInputStream.close();
+            } catch (Exception ei) {
+                Utils.log("[OTACommandProcessor] Got an error closing session input: " + ei);
+            }
+            try {
+                dataOutputStream.close();
+            } catch (Exception eo) {
+                Utils.log("[OTACommandProcessor] Got an error closing session output: " + eo);
+            }
+            try {
+                if (conn instanceof Connection) {
+                    ((Connection) conn).close();
+                }
+            } catch (Exception ec) {
+                Utils.log("[OTACommandProcessor] Got an error closing session connection: " + ec);
+            }
+        }
 	}
 
 	public void sendErrorDetails(String msg) throws IOException {
@@ -379,7 +387,17 @@ class OTACommandProcessor extends Thread implements ISpotAdminConstants, IOTACom
 	}
 
 	private byte[] getCommand() throws IOException {
-		byte[] command = new byte[dataInputStream.readInt()];
+        int len = 0;
+        while (len == 0) {
+            len = dataInputStream.readInt();
+        }
+        if (isRemote) {
+            if (len < 0 || len > 10000) {
+                Utils.log("[OTACommandProcessor] getCommand: Bad command length = " + len);
+                throw new IOException("Bad command length");
+            }
+        }
+		byte[] command = new byte[len];
 		dataInputStream.readFully(command);
 		return command;
 	}
@@ -438,6 +456,13 @@ class OTACommandProcessor extends Thread implements ISpotAdminConstants, IOTACom
 		return new Date(timeOfLastCommunication);
 	}
 
+    /**
+     * @return the time that this OTA session was started
+     */
+	public long getStartTime() {
+		return startTime;
+	}
+
 	public IEEEAddress getBasestationAddress() {
 		return hostAddress;
 	}
@@ -466,6 +491,13 @@ class OTACommandProcessor extends Thread implements ISpotAdminConstants, IOTACom
 					Utils.sleep(20); // when using a USART connection, allow time for the stream traffic to quiesce
 									 // TODO find out why this is necessary - bug 1133
 				}
+                if (isRemote) {
+                    if (dataInputStream.available() > 0) {
+                        throw new IOException("Unexpected input while receiving file!");
+                    }
+                    dataOutputStream.writeUTF("ok");
+                    dataOutputStream.flush();
+                }
 				flashOutputStream.write(buffer, 0, bytesToWriteThisLoop);
 				flashedByteCount += bytesToWriteThisLoop;
 			}

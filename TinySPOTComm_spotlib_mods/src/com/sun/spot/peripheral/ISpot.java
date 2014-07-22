@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -38,6 +38,7 @@ import com.sun.spot.peripheral.radio.I802_15_4_PHY;
 import com.sun.spot.peripheral.radio.IProprietaryRadio;
 import com.sun.spot.peripheral.radio.IRadioPolicyManager;
 import com.sun.spot.resourcesharing.IResourceRegistry;
+import com.sun.spot.service.IService;
 import com.sun.spot.util.Properties;
 
 
@@ -141,6 +142,13 @@ public interface ISpot {
 	 */
 	ISpiMaster getSPI();
 	
+	/**
+	 * Get access to the I2C interface.
+	 * This interface is used to communicate with external devices using TWI
+	 * @return the I2C interface.
+	 */
+	II2C getI2C();
+
 	/**
 	 * Get the Driver Registry.
 	 * @return the Driver Registry

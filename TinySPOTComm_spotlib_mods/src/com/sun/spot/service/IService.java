@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2007-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -79,6 +79,10 @@ public interface IService {
      * Service is currently in the process of resuming.
      */
     public static final int RESUMING = 6;
+    /**
+     * Service is ready to be called. Used for services that do not run in their own threads.
+     */
+    public static final int READY = 7;
 
     /**
      * Start the service, and return whether successful.

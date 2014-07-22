@@ -64,6 +64,11 @@ public interface IProprietaryRadio {
 	void reset();
 
 	/**
+	 * Reset the hardware device receive buffer
+	 */
+	void resetRX();
+
+    /**
 	 * Set the hardware device to ignore non-broadcast messages that don't
 	 * match our panID and extendedAddress
 	 * 
@@ -184,7 +189,7 @@ public interface IProprietaryRadio {
 	public int getShortPacket();
 
 	/**
-	 * Reset the CrcError, ShortPacket, TxMissed and RxOverflow counters to zero. 
+	 * Reset the CrcError, ShortPacket, TxMissed and RxOverflow counters to zero.
 	 */
 	public void resetErrorCounters();
 

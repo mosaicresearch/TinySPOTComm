@@ -48,6 +48,8 @@ import com.sun.spot.peripheral.CC2420Driver;
 import com.sun.spot.peripheral.IAT91_AIC;
 import com.sun.spot.peripheral.IAT91_Peripherals;
 import com.sun.spot.peripheral.IDriver;
+import com.sun.spot.peripheral.ISleepManager;
+import com.sun.spot.peripheral.Spot;
 import com.sun.spot.peripheral.SpotFatalException;
 import com.sun.spot.util.Utils;
 import com.sun.squawk.Address;
@@ -166,6 +168,8 @@ class CC2420 implements I802_15_4_PHY, IProprietaryRadio, IDriver {
 	private boolean recordHistory = false;
 	private Object rxTxInterlockMonitor = new Object();
 	private Address addressOfLastDeviceInterruptTime;
+
+    private boolean waitingForRxToClear = false;
 	
 	//For testing only
 	CC2420(CC2420Driver driver) {
@@ -219,6 +223,16 @@ class CC2420 implements I802_15_4_PHY, IProprietaryRadio, IDriver {
 		resetDefaults();
 		resetPrim();
 	}
+
+	/**
+	 * Reset the hardware device receive buffer.
+	 */
+	public void resetRX() {
+        // just like flushRX(), but increment rxError counter
+		driver.sendStrobe(REG_SFLUSHRX);
+		lastStatus = driver.sendStrobe(REG_SFLUSHRX);
+    }
+
 
 	/* (non-Javadoc)
 	 * @see com.sun.squawk.peripheral.radio.I802_15_4_PHY#pdDataRequest(com.sun.squawk.peripheral.radio.RadioPacket)
@@ -304,7 +318,9 @@ class CC2420 implements I802_15_4_PHY, IProprietaryRadio, IDriver {
 		synchronized (rxTxInterlockMonitor) {
 			while (driver.isSfdHigh() || overflowDetected || driver.isFifopHigh()) {
 				try {
-					rxTxInterlockMonitor .wait();
+                    waitingForRxToClear = true;
+                    rxTxInterlockMonitor.wait();
+                    waitingForRxToClear = false;
 				} catch (InterruptedException e) {
 					e.printStackTrace();
 				}
@@ -429,8 +445,9 @@ class CC2420 implements I802_15_4_PHY, IProprietaryRadio, IDriver {
 			trxState = RX_ON;
 //			Utils.log("[CC2420] setting trxState = RX_ON");
 		} else if (newState == TRX_OFF && trxState == RX_ON) {
-			// make sure we aren't receiving or transmitting
-			while (driver.isSfdHigh() || driver.isFifopHigh());
+			// make sure we aren't transmitting - ok to turn off in middle of receiving
+            long cnt = 0;
+			while (driver.isSfdHigh() && isTxActive() && cnt < 100000) cnt++;
 			trxState = TRX_OFF;
 			stopRX();
 //			Utils.log("[CC2420] setting trxState = TRX_OFF");
@@ -525,7 +542,7 @@ class CC2420 implements I802_15_4_PHY, IProprietaryRadio, IDriver {
 	 * @see com.sun.squawk.peripheral.spot.IDriver#tearDown()
 	 */
 	public boolean tearDown() {
-		if (trxState == TRX_OFF) {
+		if (!waitingForRxToClear && trxState == TRX_OFF) {
 			driver.tearDown();
 			return true;
 		}

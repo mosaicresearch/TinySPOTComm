@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -34,8 +34,11 @@ import com.sun.spot.peripheral.NoRouteException;
 import com.sun.spot.peripheral.radio.LowPanHeader;
 import com.sun.spot.peripheral.radio.proxy.IRadioServerContext;
 import com.sun.spot.peripheral.radio.proxy.ProxyRadiostreamProtocolManager;
+import com.sun.spot.peripheral.radio.routing.RouteInfo;
+import com.sun.spot.peripheral.radio.routing.interfaces.IRoutingManager;
 import com.sun.spot.util.Debug;
 import com.sun.spot.util.Queue;
+import com.sun.spot.util.Utils;
 
 
 /* (non-Javadoc)
@@ -52,14 +55,17 @@ public class RadiostreamProtocolManager extends RadioProtocolManager implements 
 	public static final String PROTOCOL_NAME = "radiostream";
 	private static IRadiostreamProtocolManager theInstance;
 	
-	static final int NUMBER_OF_RETRIES = 3;
+	static final int NUMBER_OF_RETRIES = 5;  // was 3;
 	static final byte CTRL_ACK = 2;
 	static final byte CTRL_ACK_REQUIRED = 4;
-	static int RETRANSMIT_TIMEOUT = 15000; // not final to aid testing    
+	static int RETRANSMIT_BASE_TIMEOUT = 500;  // was 15000; // not final to aid testing
+	static int RETRANSMIT_PER_HOP_TIMEOUT = 250;
+    private static final int WINDOW_SIZE = 50;
 
 	private Timer retransScheduler;
     private Queue inputQueue;
 	private InputHandler inputHandler;
+    private static IRoutingManager routingManager;
 	
 	public static void main(String[] args) {
 		InterIsolateServer.run(ProxyRadiostreamProtocolManager.CHANNEL_IDENTIFIER,
@@ -83,6 +89,7 @@ public class RadiostreamProtocolManager extends RadioProtocolManager implements 
 	
 	RadiostreamProtocolManager(ILowPan lowpan, IRadioPolicyManager radioPolicyManager) {
 		super(lowpan, radioPolicyManager);
+        routingManager = lowpan.getRoutingManager();
 		retransScheduler = new Timer();
 		inputQueue = new Queue();
 		inputHandler = new InputHandler();
@@ -106,11 +113,12 @@ public class RadiostreamProtocolManager extends RadioProtocolManager implements 
 			throw new IllegalArgumentException(cid.toString()+" cannot be used for sending");
 		
 		ConnectionState cs = (ConnectionState)connectionIDTable.get(cid);
-		if (cs.status != ConnectionState.INTACT) {
-			System.out.println("[Radiostream] Discovered broken connection - reporting");
-			cs.waitUntilNoRetransBuffers();
-			return 0; // should never be executed because an exception is expected
-		}
+        if (cs.status != ConnectionState.INTACT) {
+            System.out.println("[Radiostream] Discovered broken connection - reporting");
+            cs.removeAllRetransBuffers();
+            cs.checkStatusAndReport();
+            return 0; // should never be executed because an exception is expected
+        }
 		synchronized (cs) {
 			payload[PORT_OFFSET] = cid.getPortNo();
 			int newSeq = (cs.lastOutgoingSeq + 1) % 256;
@@ -118,10 +126,19 @@ public class RadiostreamProtocolManager extends RadioProtocolManager implements 
 				// send a control packet
 				payload[CTRL_OFFSET] = CTRL_NEW_CONN;
 				payload[SEQ_OFFSET] = (byte)newSeq;
-				newSeq = (newSeq + 1) % 256;
+                cs.lastOutgoingSeq = newSeq;
+                cs.nextACKSeq = newSeq;
+                newSeq = (newSeq + 1) % 256;
 				sendData(cs, payload, DATA_OFFSET);
 				cs.waitUntilNoRetransBuffers();
 			}
+            while (!inWindow(cs.nextACKSeq, newSeq)) {
+                try {
+                    cs.wait();
+                } catch (InterruptedException ex) {
+                    // ignore
+                }
+            }
 			payload[CTRL_OFFSET] = 0;
 			payload[SEQ_OFFSET] = (byte)newSeq;
 			sendData(cs, payload, length);
@@ -147,19 +164,36 @@ public class RadiostreamProtocolManager extends RadioProtocolManager implements 
 	 * This is the method called by the input handler thread to process packets that arrive for us.
 	 */
 	private void processIncomingData(IncomingData incoming) {
-//		System.out.println("Processing incomimg data from " + sourceAddress + " " + Utils.stringify(payload));
-		
+//		System.out.println("Processing incoming data from " + sourceAddress + " " + Utils.stringify(payload));
 		byte portNumber = incoming.payload[PORT_OFFSET];
 		if (isAck(incoming.payload)) {
 			ConnectionState connectionState = getConnectionState(incoming.headerInfo.originator, OUTPUT, portNumber); 
-            connectionState.removeRetransBuffer(incoming.payload[SEQ_OFFSET]);
+			if (connectionState != null) {
+                connectionState.removeRetransBuffer(incoming.payload[SEQ_OFFSET]);
+                if (connectionState.nextACKSeq == (incoming.payload[SEQ_OFFSET] & 0xff)) {
+                    synchronized (connectionState) {
+                        connectionState.nextACKSeq = (connectionState.nextACKSeq + 1) % 256;
+                        int lastOutgoingSeq = (connectionState.lastOutgoingSeq + 1) % 256;
+                        while (connectionState.nextACKSeq != lastOutgoingSeq) {
+                            if (connectionState.getRetransBuffer((byte)connectionState.nextACKSeq) != null) {
+                                break;
+                            } else {
+                                connectionState.nextACKSeq = (connectionState.nextACKSeq + 1) % 256;
+                            }
+                        }
+                        connectionState.notifyAll();
+                    }
+                }
+            }
 		} else {
-			final ConnectionState connectionState = getConnectionState(incoming.headerInfo.originator, INPUT, portNumber); 
+            ConnectionState connectionState = getConnectionState(incoming.headerInfo.originator, INPUT, portNumber);
 			if (connectionState != null) {
 				if (isAckRequested(incoming.payload)) {
 					sendAck(connectionState, incoming.payload[SEQ_OFFSET]);
 				}
-				checkSequenceNumberAndEnqueue(connectionState, incoming);
+                synchronized (connectionState) {
+                    checkSequenceNumberAndEnqueue(connectionState, incoming);
+                }
 			}
 		}
 	}
@@ -181,17 +215,23 @@ public class RadiostreamProtocolManager extends RadioProtocolManager implements 
 	 */
 	private void sendAck(ConnectionState connectionState, byte seqNum) {
         byte[] controlBuffer = new byte[] {connectionState.id.getPortNo(), seqNum, CTRL_ACK};
-        try {
-            lowpan.send(LowPanHeader.DISPATCH_SPOT, PROTOCOL_NUMBER, connectionState.id.getMacAddress(), controlBuffer, 0, controlBuffer.length);
-        } catch (NoRouteException ex) {
-        	Debug.print("[Radiostream] unable to send meshlayer ack " +
-                    "due to no route exception.");
-            ex.printStackTrace();
-        } catch (ChannelBusyException ex) {
-        	Debug.print("[Radiostream] unable to send meshlayer ack " +
-                    "due to channel busy.");
-            ex.printStackTrace();
-		}
+        for (int i = 0; i <= 5; i++) {
+            int delay = 5;
+            try {
+                lowpan.send(LowPanHeader.DISPATCH_SPOT, PROTOCOL_NUMBER, connectionState.id.getMacAddress(), controlBuffer, 0, controlBuffer.length);
+                break;
+            } catch (NoRouteException ex) {
+                delay = 200;
+                Debug.print("[Radiostream] unable to send meshlayer ack " + (seqNum & 0xff) +
+                        " due to no route exception.");
+            // ex.printStackTrace();
+            } catch (ChannelBusyException ex) {
+                Debug.print("[Radiostream] unable to send meshlayer ack " + (seqNum & 0xff) +
+                        " due to channel busy.");
+            // ex.printStackTrace();
+            }
+            Utils.sleep(delay);
+        }
 	}
 
 	public String getName() {
@@ -214,19 +254,26 @@ public class RadiostreamProtocolManager extends RadioProtocolManager implements 
 
 		if (receivedSeq == previousSequenceNumber || newConnectionRequested) {
 			// throwing away a duplicate || this was a control packet
-		} else {
-			if (expectedSeq == receivedSeq) {
-				do {
-					connectionState.addToQueue(incomingData);
-					expectedSeq = (expectedSeq + 1) % 256;
-					incomingData = (IncomingData)connectionState.reorderTable.remove(expectedSeq);
-				} while (incomingData != null);
-				connectionState.lastIncomingSeq = expectedSeq - 1;
-			} else {
-				connectionState.reorderTable.put(receivedSeq, incomingData);
-			}
-		}
+		} else if (expectedSeq == receivedSeq) {
+            do {
+                connectionState.addToQueue(incomingData);
+                expectedSeq = (expectedSeq + 1) % 256;
+                incomingData = (IncomingData) connectionState.reorderTable.remove(expectedSeq);
+            } while (incomingData != null);
+            connectionState.lastIncomingSeq = (expectedSeq == 0) ? 255 : (expectedSeq - 1);
+        } else {
+            if (inWindow(expectedSeq, receivedSeq)) {
+                connectionState.reorderTable.put(receivedSeq, incomingData);
+            }
+        }
 	}
+
+    private boolean inWindow(int windowStart, int seqNo) {
+        windowStart = (windowStart & 0xff);
+        int windowEnd = (windowStart + WINDOW_SIZE) % 256;
+        seqNo = (seqNo & 0xff);
+        return windowStart < windowEnd ? (windowStart <= seqNo && seqNo < windowEnd) : (windowStart <= seqNo || seqNo < windowEnd);
+    }
 	
 	private void sendData(ConnectionState cs, byte[] payload, int length) {
 		// assume that this will be a single hop, so don't adjust CTRL byte
@@ -254,13 +301,6 @@ public class RadiostreamProtocolManager extends RadioProtocolManager implements 
 	private void transmitWithRetries(RetransmitBuffer rb, ConnectionState cs) {
 		byte seqNum = rb.buffer[SEQ_OFFSET];
 		try {
-			if (isAckRequested(rb.buffer)) {
-				if (!radioPolicyManager.isRadioReceiverOn()) {
-					throw new RadioOffException("Attempt to perform multihop send with radio receiver off");
-				}
-				rb.retransmitTimer = new RetransmitTimer(seqNum, cs, this);
-				retransScheduler.schedule(rb.retransmitTimer, RETRANSMIT_TIMEOUT);
-			}
 			boolean wasSent = lowpan.send(LowPanHeader.DISPATCH_SPOT, PROTOCOL_NUMBER, cs.id.getMacAddress(), rb.buffer, 0, rb.buffer.length, !isAckRequested(rb.buffer));
 			if (!wasSent) {
 				// ok, so it wasn't a single hop, now ask for an ack
@@ -268,16 +308,34 @@ public class RadiostreamProtocolManager extends RadioProtocolManager implements 
 				cs.addRetransBuffer(seqNum, rb);
 				//Debug.print("[Radiostream] transmit: no single hop route available. Trying again with ACK request");
 				transmitWithRetries(rb, cs);
-			}
-		// For each of the three exceptions below, we could reset the CTRL_ACK_REQUIRED bit.
+			} else if (isAckRequested(rb.buffer)) {
+				if (!radioPolicyManager.isRadioReceiverOn()) {
+					throw new RadioOffException("Attempt to perform multihop send with radio receiver off");
+				}
+				rb.retransmitTimer = new RetransmitTimer(seqNum, cs, this);
+                int timeout = RETRANSMIT_BASE_TIMEOUT;
+                RouteInfo info = routingManager.getRouteInfo(cs.id.getMacAddress());
+                if (info.nextHop != com.sun.spot.peripheral.radio.mhrp.aodv.Constants.INVALID_NEXT_HOP) {
+                    timeout += (info.hopCount - 1) * RETRANSMIT_PER_HOP_TIMEOUT;
+                } else {
+                    timeout += 4 * RETRANSMIT_PER_HOP_TIMEOUT;  // guess it might be 4 hops
+                }
+                // make sure to schedule retransmit after sending as send takes time
+				retransScheduler.schedule(rb.retransmitTimer, timeout);
+			} else {    // single hop
+                cs.nextACKSeq = ((rb.buffer[SEQ_OFFSET] & 0xff) + 1) % 256;
+            }
+
+		// For each of the exceptions below, we could reset the CTRL_ACK_REQUIRED bit.
 		// We choose not to as - most likely - the route hop count won't have changed.
 		} catch (NoRouteException ex) {
 			if (rb.retransmitTimer != null) rb.retransmitTimer.cancel();
-			Debug.print("[Radiostream] transmit: NoRouteException caught. Trying to retransmit");
+			Debug.print("[Radiostream] transmit: seq=" + (seqNum & 0xff) + " NoRouteException caught. Trying to retransmit");
+            Utils.sleep(500);
 		    retransmit(rb, cs, ConnectionState.NO_ROUTE);
 		} catch (ChannelBusyException ex) {
 			if (rb.retransmitTimer != null) rb.retransmitTimer.cancel();
-			Debug.print("[Radiostream] transmit: ChannelBusyException caught. Trying to retransmit");
+			Debug.print("[Radiostream] transmit: seq=" + (seqNum & 0xff) + " ChannelBusyException caught. Trying to retransmit");
 		    retransmit(rb, cs, ConnectionState.CHANNEL_BUSY);
 		}
 	}

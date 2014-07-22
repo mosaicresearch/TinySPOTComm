@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -21,6 +21,7 @@
  * Park, CA 94025 or visit www.sun.com if you need additional
  * information or have any questions.
  */
+
 package com.sun.spot.peripheral.basestation;
 
 import java.io.IOException;
@@ -31,6 +32,7 @@ import com.sun.spot.peripheral.SpotFatalException;
 import com.sun.spot.peripheral.radio.I802_15_4_MAC;
 import com.sun.spot.peripheral.radio.RadioFactory;
 import com.sun.spot.peripheral.radio.SpotSerialPipe;
+import com.sun.spot.service.Heartbeat;
 import com.sun.spot.util.Queue;
 import com.sun.spot.util.Utils;
 import com.sun.squawk.VM;
@@ -42,18 +44,16 @@ public class MACProxyServer implements IResettableServer {
     private byte[] inputBuffer = new byte[255];
     private MCPSDataIndicationCommand dataIndicationCommand = new MCPSDataIndicationCommand().with(RadioFactory.getI802_15_4_MAC());
     private MCPSDataRequestCommand dataRequestCommand = new MCPSDataRequestCommand();
-    ILed receiveLed = Spot.getInstance().getGreenLed();
-    ILed sendLed = Spot.getInstance().getRedLed();
+    private ILed receiveLed = Spot.getInstance().getGreenLed();
+    private ILed sendLed = Spot.getInstance().getRedLed();
+    private Heartbeat heartbeat = new Heartbeat(10000, 3300);   // clear red/green LEDS every 3.3 seconds per 10 second heartbeat pattern
 
     public MACProxyServer(SpotSerialPipe serialPipe) {
         this.serialPipe = serialPipe;
     }
 
     public void run() {
-        Thread ledManagerThread = new Thread(new LedManager(), "Basestation LedManager");
-        ledManagerThread.setPriority(Thread.MIN_PRIORITY);
-        VM.setAsDaemonThread(ledManagerThread);
-        ledManagerThread.start();
+        heartbeat.start();
 
         new MACProxyWorkerThread().start();
         new MACProxyWorkerThread().start();
@@ -162,27 +162,4 @@ public class MACProxyServer implements IResettableServer {
         }
     }
 
-    public class LedManager implements Runnable {
-
-        private static final int HEARTBEAT_COUNT = 4;
-        private static final long ACTIVITY_DECAY_TIMEOUT = 3000;
-
-        public void run() {
-            ILed heartbeatLed = receiveLed;
-            while (true) {
-                for (int i = 0; i < HEARTBEAT_COUNT; i++) {
-                    Utils.sleep(ACTIVITY_DECAY_TIMEOUT);
-                    receiveLed.setOff();
-                    sendLed.setOff();
-                }
-                heartbeatLed.setOn();
-                Utils.sleep(100);
-                heartbeatLed.setOff();
-                Utils.sleep(100);
-                heartbeatLed.setOn();
-                Utils.sleep(100);
-                heartbeatLed.setOff();
-            }
-        }
-    }
 }

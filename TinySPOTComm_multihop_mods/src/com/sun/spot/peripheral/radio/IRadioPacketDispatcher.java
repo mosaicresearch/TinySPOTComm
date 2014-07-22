@@ -62,12 +62,27 @@ public interface IRadioPacketDispatcher {
     /**
      * Register to be notified with Link Quality information.
      * @param packetListener the class that wants to be called back
+     * @deprecated use addPacketQualityListener()
      */
     public void registerPacketQualityListener(IPacketQualityListener packetListener);
     
     /**
      * Undo a previous call of registerPacketListener()
      * @param listener the class that wants to be deregistered
+     * @deprecated use removePacketQualityListener()
      */
     public void deregisterPacketQualityListener(IPacketQualityListener listener);
+
+    /**
+     * Register to be notified with Link Quality information.
+     * @param packetListener the class that wants to be called back
+     */
+    public void addPacketQualityListener(IPacketQualityListener packetListener);
+
+    /**
+     * Undo a previous call of registerPacketListener()
+     * @param listener the class that wants to be deregistered
+     */
+    public void removePacketQualityListener(IPacketQualityListener listener);
+
 }

@@ -266,6 +266,8 @@ class AT91_TC implements TimerCounterBits, IAT91_TC {
 	}
 
 	public void shutDown() {
+        disable();
+        tearDown();
 	}
 
 	public void setUp() {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -102,7 +102,7 @@ public class Radiogram implements Datagram {
 	 * @return the address associated with this Radiogram in dotted hex notation
 	 */
 	public String getAddress() {
-		return new IEEEAddress(address).asDottedHex();
+		return IEEEAddress.toDottedHex(address);
 	}
         
 	/**
@@ -151,7 +151,7 @@ public class Radiogram implements Datagram {
 			// can't set the address of non-server radiogram
 			throw new IllegalStateException("Cannot set the address of a radiogram on a non-server connection");
 		}
-		address = new IEEEAddress(addr).asLong();
+		address = IEEEAddress.toLong(addr);
 	}
 
 	/**
@@ -402,17 +402,21 @@ public class Radiogram implements Datagram {
 		return headerInfo.rssi;
 	}
 	
-        /**
-         * Hop count is the number of times a packet will be retransmitted until it reaches the final 
-         * destination.  For AODV routed packets, the remaining hop count should be zero, since AODV
-         * routes use exact hop counts.  Hop count may be non-zero for mesh forwarded broadcast packets
-         *
-         * @return - number of hops remaining in this Radiogram
-         */
-        public  int getHopCount() {
-            String hopcount = headerInfo.getProperty("hopcount");  
-            return Integer.parseInt(hopcount);
-        }
+    /**
+     * Hop count is the number of times a packet will be retransmitted until it reaches the final
+     * destination.  For AODV routed packets, the remaining hop count should be zero, since AODV
+     * routes use exact hop counts.  Hop count may be non-zero for mesh forwarded broadcast packets
+     *
+     * @return - number of hops remaining in this Radiogram
+     */
+    public int getHopCount() {
+        String hopcount = headerInfo.getProperty("hopcount");
+        return Integer.parseInt(hopcount);
+    }
+
+    public boolean isBroadcast() {
+        return headerInfo.destinationAddress == 0xFFFF;
+    }
         
 	public long getTimestamp() {
 		return timestamp;
@@ -424,7 +428,7 @@ public class Radiogram implements Datagram {
 
 	void receive() throws IOException {
 		reset();
-                long timeout = connection.getTimeout();
+        long timeout = connection.getTimeout();
 		IncomingData receivedData;
 		if (timeout >= 0) {
 			receivedData = connection.receivePacket(timeout);

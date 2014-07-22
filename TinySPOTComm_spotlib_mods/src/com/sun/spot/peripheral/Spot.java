@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -21,6 +21,7 @@
  * Park, CA 94025 or visit www.sun.com if you need additional
  * information or have any questions.
  */
+
 package com.sun.spot.peripheral;
 
 import java.io.IOException;
@@ -56,10 +57,14 @@ import com.sun.spot.resourcesharing.IResourceRegistry;
 import com.sun.spot.resourcesharing.ProxyResourceRegistryMaster;
 import com.sun.spot.resourcesharing.ResourceRegistryChild;
 import com.sun.spot.resourcesharing.ResourceRegistryMaster;
+import com.sun.spot.service.ServiceRegistry;
+import com.sun.spot.service.SpotBlink;
 import com.sun.spot.util.IEEEAddress;
 import com.sun.spot.util.Properties;
 import com.sun.spot.util.Utils;
+import com.sun.squawk.Address;
 import com.sun.squawk.Isolate;
+import com.sun.squawk.Unsafe;
 import com.sun.squawk.VM;
 import com.sun.squawk.peripheral.INorFlashSector;
 import com.sun.squawk.util.Arrays;
@@ -80,9 +85,11 @@ import com.sun.squawk.vm.ChannelConstants;
 public class Spot implements ISpot {
 
     private static final String SPOT_STARTUP_PREFIX = "spot-startup-";
+
     private static ISpot theSpot;
     private static boolean startupInitializationDone = false;
     private static boolean isMasterIsolate = false;
+
     private ILed greenLed;
     private ILed redLed;
     private IAT91_TC tc[] = new IAT91_TC[6];
@@ -92,6 +99,7 @@ public class Spot implements ISpot {
     private IAT91_AIC aic;
     private IDriverRegistry driverRegistry;
     private ISpiMaster spi;
+    private II2C i2c;
     private IAT91_PowerManager powerManager;
     private IFlashMemoryDevice flashMemory;
     private ILTC3455 ltc3455;
@@ -119,17 +127,19 @@ public class Spot implements ISpot {
      * @param args arg[0] indicates whether the main or a child isolate is being started
      */
     public static void main(String[] args) {
+    	// If this is the master isolate, then the PIOs will not be available until masterIsolateStartup()
+    	// has executed, so before that point, be careful not to access the PIOs.
         isMasterIsolate = "true".equals(args[0]);
 
         startupInitializationDone = true;
         final Spot spot = (Spot) getInstance();
+        spot.peekPlatform();
         spot.loadSystemProperties();
 
         // Don't waste time trying to log before loadSystemProperties has completed!
         // log("Spot initialization called (" + isMasterIsolate + ")");
 
         spot.determineIEEEAddress();
-        spot.peekPlatform();
 
         if (isMasterIsolate) {
             spot.masterIsolateStartup();
@@ -143,6 +153,14 @@ public class Spot implements ISpot {
 
     private void masterIsolateStartup() {
 
+    	for (int pioSelector=0; pioSelector<pio.length; pioSelector++) {
+	    	pio[pioSelector] = new AT91_PIO(pioSelector,
+	                getAT91_AIC(),
+	                getAT91_PowerManager(),
+	                getSpotPins().getPinsNotAvailableToPIO(pioSelector));
+	        getDriverRegistry().add((IDriver) (pio[pioSelector]));
+    	}
+    	
         Utils.log("Allocating " + ConfigPage.DEFAULT_SECTOR_COUNT_FOR_RMS + " sectors for RMS");
         VM.getPeripheralRegistry().add(new NorFlashSectorAllocator());
 
@@ -165,8 +183,16 @@ public class Spot implements ISpot {
         InterIsolateServer.run(ProxyDMAMemoryManager.DMA_MEMORY_SERVER, getDMAMemoryManager());
         InterIsolateServer.run(ProxyAT91_PIO.AT91_PIO_SERVER, this);
 
+        ServiceRegistry.getInstance().add(new SpotBlink());
+
         if (Utils.isOptionSelected("spot.start.manifest.daemons", true)) {
             runThirdPartyStartups();
+
+            // want to start OTA only after any network/radio stack has been initialized
+            IOTACommandServer ota = OTACommandServer.getInstance();
+            if (ota.getEnabled()) {
+                ota.start();
+            }
         } else {
             Utils.log("Not starting manifest daemons");
         }
@@ -252,20 +278,14 @@ public class Spot implements ISpot {
     }
 
     public IAT91_PIO getAT91_PIO(int pioSelector) {
-        synchronized (pio) {
-            if (pio[pioSelector] == null) {
-                if (isMasterIsolate) {
-                    pio[pioSelector] = new AT91_PIO(pioSelector,
-                            getAT91_AIC(),
-                            getAT91_PowerManager(),
-                            getSpotPins().getPinsNotAvailableToPIO(pioSelector));
-                    getDriverRegistry().add((IDriver) (pio[pioSelector]));
-                } else {
+    	if (!isMasterIsolate) { // PIOs for master isolate are initialised in masterIsolateStartup
+	        synchronized (pio) {
+	            if (pio[pioSelector] == null) {
                     pio[pioSelector] = new ProxyAT91_PIO(pioSelector);
-                }
-            }
-            return pio[pioSelector];
+	            }
+	        }
         }
+    	return pio[pioSelector];
     }
 
     /**
@@ -322,8 +342,13 @@ public class Spot implements ISpot {
     public synchronized ILTC3455 getLTC3455() {
         assertIsMaster();
         if (ltc3455 == null) {
-            ltc3455 = new LTC3455(getSpotPins());
-            getDriverRegistry().add(ltc3455);
+        	if (getHardwareType() > 6) {
+        		ltc3455 = new LTC3455ControlledViaPowerController(getPowerController());
+        	} else {
+        		LTC3455ControlledViaPIO ltc3455ControlledViaPIO = new LTC3455ControlledViaPIO(getSpotPins());
+        		getDriverRegistry().add(ltc3455ControlledViaPIO);
+				ltc3455 = ltc3455ControlledViaPIO;
+        	}
         }
         return ltc3455;
     }
@@ -362,7 +387,7 @@ public class Spot implements ISpot {
      */
     public I802_15_4_MAC[] getI802_15_4_MACs() {
         assertIsMaster();
-        return new I802_15_4_MAC[]{RadioFactory.getI802_15_4_MAC()                };
+        return new I802_15_4_MAC[]{ RadioFactory.getI802_15_4_MAC() };
     }
 
     /* (non-Javadoc)
@@ -374,6 +399,17 @@ public class Spot implements ISpot {
         }
         return spi;
     }
+
+    /* (non-Javadoc)
+     * @see com.sun.squawk.peripheral.spot.ISpot#getI2C()
+	 */
+    public synchronized II2C getI2C() {
+        if (i2c == null) {
+            i2c = new AT91_I2C();
+        }
+        return i2c;
+    }
+
 
     public synchronized IDriverRegistry getDriverRegistry() {
         if (driverRegistry == null) {
@@ -583,19 +619,12 @@ public class Spot implements ISpot {
     }
 
     private void peekPlatform() {
-        hardwareType = 5; // Guess hardware type to get access to pins to read actual hardware type
-
-        if (isMasterIsolate) {
-            PIOPin rev0 = getSpotPins().getBD_REV0();
-            PIOPin rev1 = getSpotPins().getBD_REV1();
-            PIOPin rev2 = getSpotPins().getBD_REV2();
-            hardwareType = (rev0.isLow() ? 1 : 0) + (rev1.isLow() ? 2 : 0) + (rev2.isLow() ? 4 : 0) + 4;
-        } else {
-            hardwareType = Integer.parseInt(System.getProperty("spot.hardware.rev"));
-        }
-        spotPins = null; // Now we know our hardware type, force reconstruction of SpotPins instance
-        // to pick up hardware type-specific settings.
-
+        int pioState = Unsafe.getInt(Address.fromPrimitive(AbstractAT91_PIO.BASE_ADDRESS[SpotPins.BD_REV0.pio]), AbstractAT91_PIO.PIO_PDSR);
+        // assume all three pins on the same PIO
+        hardwareType = ((pioState & SpotPins.BD_REV0.pin) == 0 ? 1 : 0) + 
+        				((pioState & SpotPins.BD_REV1.pin) == 0 ? 2 : 0) +
+        				((pioState & SpotPins.BD_REV2.pin) == 0 ? 4 : 0) +
+        				4;
         Utils.log("Detected hardware type " + hardwareType);
     }
 
@@ -624,7 +653,7 @@ public class Spot implements ISpot {
     }
 
     public IOTACommandServer getOTACommandServer() throws IOException {
-        assertIsMaster();
+        // assertIsMaster();  // OTA is now in ServiceRegistry
         return OTACommandServer.getInstance();
     }
 

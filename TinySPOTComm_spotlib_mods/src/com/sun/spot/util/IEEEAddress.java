@@ -58,7 +58,6 @@ public class IEEEAddress {
 	 * Then, the string is first assumed to be dotted hex (that's four four-digit hex numbers separated 
 	 * by full stops). If that conversion fails, the string is parsed as a decimal number.
 	 * 
-	 * On the host computer, the strng 
 	 * @param ieeeAddressString the string to convert
 	 * @return the numeric value of the address
 	 */

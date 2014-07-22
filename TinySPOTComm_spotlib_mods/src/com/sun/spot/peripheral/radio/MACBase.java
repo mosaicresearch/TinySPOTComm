@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -42,6 +42,7 @@
 */
 package com.sun.spot.peripheral.radio;
 
+import com.sun.spot.peripheral.ILed;
 import java.util.Random;
 
 import com.sun.spot.peripheral.ISpot;
@@ -60,85 +61,102 @@ abstract class MACBase implements I802_15_4_MAC, IProprietaryMAC {
      */
     //private static final int TIME_TO_WAIT_FOR_ACK_MICROSECS = 864; // = 54 symbol periods
 	//Ack Polling time increased for TinySPOTComm project
-    private static final int TIME_TO_WAIT_FOR_ACK_MICROSECS = 992; // = 62 symbol periods
+    private static final int TIME_TO_WAIT_FOR_ACK_MICROSECS = 1504; // = 94 symbol periods
     public static final int DEFAULT_MAX_RECEIVE_QUEUE_LENGTH = 1500;
     private static final int DEFAULT_RECEIVE_QUEUE_LENGTH_TO_DROP_BROADCAST_PACKETS = 1000;
     private Thread receiveThread;
     private byte macDSN;
     private Object ackMonitor = new Object();
+    private Object sendMonitor = new Object();
     private boolean awaitingAck;
+    private byte ackDSN;
     private RadioPacket lastAck;
     protected long extendedAddress;
     protected boolean rxOnWhenIdle;
     protected Queue dataQueue;
     private Random random;
     protected int channelAccessFailure = 0;
+    private int rxError = 0;
     private int wrongAck = 0;
     private int noAck = 0;
     private int nullPacketAfterAckWait = 0;
     private int maxReceiveQueueLength = DEFAULT_MAX_RECEIVE_QUEUE_LENGTH;
     private int receiveQueueLengthToDropBroadcastPackets = DEFAULT_RECEIVE_QUEUE_LENGTH_TO_DROP_BROADCAST_PACKETS;
-    static final int A_MAX_FRAME_RETRIES = 3;
+    static final int A_MAX_FRAME_RETRIES = 4;  // was 3
     static final int A_MAX_BE = 5;
 
+    private ILed receiveLed = Spot.getInstance().getGreenLed();
+    private ILed sendLed = Spot.getInstance().getRedLed();
+    private boolean showUse = false;
+
+    private boolean filterPackets = false;
+    private boolean filterWhitelist = true;
+    private long filterList[];
+    
     /*
      * (non-Javadoc)
      * @see com.sun.squawk.peripheral.radio.I802_15_4_MAC#mcpsDataRequest(com.sun.squawk.peripheral.radio.RadioPacket)
      * 
      * This routine sends a packet
      */
-    public final synchronized int mcpsDataRequest(RadioPacket rp) {
+    public final int mcpsDataRequest(RadioPacket rp) {
         // TODO Check RadioPacket params (or should the RadioPacket do its own checking?)
+        synchronized (sendMonitor) {
 
-        byte myDSN = getDSN();
-        rp.setDSN(myDSN);
+            byte myDSN = getDSN();
+            rp.setDSN(myDSN);
 
-        int result = I802_15_4_MAC.NO_ACK;
+            int result = I802_15_4_MAC.NO_ACK;
 
-        // Enable RX. Note that we do this *even* if we aren't expecting to receive an ack,
-        // as otherwise sendIfChannelClear() will be unable to detect whether the channel is clear
-        enableRx();
-        for (int i = 0; i <= A_MAX_FRAME_RETRIES; i++) {
+            // Enable RX. Note that we do this *even* if we aren't expecting to receive an ack,
+            // as otherwise sendIfChannelClear() will be unable to detect whether the channel is clear
+            enableRx();
+            for (int i = 0; i <= A_MAX_FRAME_RETRIES; i++) {
 
-            int currentPriority = Thread.currentThread().getPriority();
-            VM.setSystemThreadPriority(Thread.currentThread(), VM.MAX_SYS_PRIORITY);
-            try {
-                if (!sendIfChannelClear(rp)) {
-                    result = I802_15_4_MAC.CHANNEL_ACCESS_FAILURE;
-                    VM.setSystemThreadPriority(Thread.currentThread(), currentPriority);
-                    break;
-                } else {
-                    if (rp.ackRequest()) {
-                        if (pollForAckPacket(myDSN)) {
-                            result = I802_15_4_MAC.SUCCESS;
-                            VM.setSystemThreadPriority(Thread.currentThread(), currentPriority);
-                            break;
-                        } else {
-                            noAck++;
-//							Utils.log("Timed out waiting for ack of my packet with DSN " + myDSN + " for retry (i)=" + i);
-                        }
+                int currentPriority = Thread.currentThread().getPriority();
+                VM.setSystemThreadPriority(Thread.currentThread(), VM.MAX_SYS_PRIORITY);
+                try {
+                    if (!sendIfChannelClear(rp)) {
+                        result = I802_15_4_MAC.CHANNEL_ACCESS_FAILURE;
                         VM.setSystemThreadPriority(Thread.currentThread(), currentPriority);
-
-                        // didn't break out, so didn't find ack: don't bother to sleep if we aren't going around again
-                        if (i < A_MAX_FRAME_RETRIES) {
-                            long timeBeforeRetry = getTimeBeforeRetry(i);
-                            if (timeBeforeRetry != 0) {
-                                Utils.sleep(timeBeforeRetry);
-                            }
-                        }
-                    } else {
-                        VM.setSystemThreadPriority(Thread.currentThread(), currentPriority);
-                        result = I802_15_4_MAC.SUCCESS;
                         break;
+                    } else {
+                        if (rp.ackRequest()) {
+                            if (pollForAckPacket(myDSN)) {
+                                result = I802_15_4_MAC.SUCCESS;
+                                VM.setSystemThreadPriority(Thread.currentThread(), currentPriority);
+                                break;
+                            } else {
+                                noAck++;
+//							Utils.log("Timed out waiting for ack of my packet with DSN " + myDSN + " for retry (i)=" + i);
+                            }
+                            VM.setSystemThreadPriority(Thread.currentThread(), currentPriority);
+
+                            // didn't break out, so didn't find ack: don't bother to sleep if we aren't going around again
+                            if (i < A_MAX_FRAME_RETRIES) {
+                                int timeBeforeRetry = getTimeBeforeRetry(i);
+                                if (timeBeforeRetry != 0) {
+                                    int initialDelay = 2 * timeBeforeRetry / 3;
+                                    Utils.sleep(initialDelay + random(timeBeforeRetry - initialDelay));
+                                }
+                            }
+                        } else {
+                            VM.setSystemThreadPriority(Thread.currentThread(), currentPriority);
+                            result = I802_15_4_MAC.SUCCESS;
+                            break;
+                        }
                     }
+                } catch (RuntimeException e) {
+                    VM.setSystemThreadPriority(Thread.currentThread(), currentPriority);
+                    throw e;
                 }
-            } catch (RuntimeException e) {
-                VM.setSystemThreadPriority(Thread.currentThread(), currentPriority);
-                throw e;
             }
+            conditionallyDisableRx();
+            if (showUse) {
+                sendLed.setOn(!sendLed.isOn());
+            }
+            return result;
         }
-        conditionallyDisableRx();
-        return result;
     }
 
     /**
@@ -159,11 +177,12 @@ abstract class MACBase implements I802_15_4_MAC, IProprietaryMAC {
         ISpot spot = Spot.getInstance();
         while (isPhysicalActive()); // wait for tx to finish
         int startTicks = spot.getSystemTicks();
+        int nrLoops = 0; //used to keep track of the number of times the systemticks timer has been reset
         int now = startTicks;
         int targetTicks = startTicks + ((ISpot.SYSTEM_TICKER_TICKS_PER_MILLISECOND * TIME_TO_WAIT_FOR_ACK_MICROSECS) / 1000);
         do {
             if (isPhysicalRxDataWaiting()) {
-                RadioPacket ackPacket = waitForAckPacket();
+                RadioPacket ackPacket = waitForAckPacket(myDSN);
                 if (ackPacket == null) {
                     // whatever it was that came, it wasn't our ACK
                     // waitForAckPacket waits for longer than the ACK wait period, so
@@ -181,8 +200,10 @@ abstract class MACBase implements I802_15_4_MAC, IProprietaryMAC {
             }
             now = spot.getSystemTicks();
             if (now < startTicks) {
-                now += ISpot.SYSTEM_TICKER_TICKS_PER_MILLISECOND;
+        	nrLoops++;
             }
+            now += (nrLoops*ISpot.SYSTEM_TICKER_TICKS_PER_MILLISECOND); // add the number of loops we already had
+            
         } while (now < targetTicks || isPhysicalRxDataWaiting());
         return false;
     }
@@ -198,7 +219,7 @@ abstract class MACBase implements I802_15_4_MAC, IProprietaryMAC {
     /*
      * Return how long to sleep before retrying a send. retry=0 implies the first retry 
      */
-    protected long getTimeBeforeRetry(int retry) {
+    protected int getTimeBeforeRetry(int retry) {
         // no delay unless overridden
         return 0;
     }
@@ -214,6 +235,9 @@ abstract class MACBase implements I802_15_4_MAC, IProprietaryMAC {
         }
 //		Utils.log("got dsn =" + internalRP.getDataSequenceNumber() + " " + System.currentTimeMillis());
         rp.copyFrom(internalRP);
+        if (showUse) {
+            receiveLed.setOn(!receiveLed.isOn());
+        }
     }
 
     public void mlmeStart(short panId, int channel) throws MAC_InvalidParameterException {
@@ -279,8 +303,9 @@ abstract class MACBase implements I802_15_4_MAC, IProprietaryMAC {
     }
 
     /**
-     * Set the IEEE Address
-     * @param i
+     * Set the IEEE Address. Need to call mlmeStart(short, int) to have it take effect.
+     *
+     * @param ieeeAddr new radio address set after next call to mlmeStart()
      */
     public void setIEEEAddress(long ieeeAddr) {
         extendedAddress = ieeeAddr;
@@ -331,10 +356,13 @@ abstract class MACBase implements I802_15_4_MAC, IProprietaryMAC {
         setIEEEAddress();
         random = new Random(extendedAddress);
         resetAttributes();
+        showUse = "true".equalsIgnoreCase(Utils.getSystemProperty("radio.traffic.show.leds",
+                Utils.getManifestProperty("radio-traffic-show-leds", "false")));
+        resetFiltering();
         startReceiveThread();
     }
 
-    private synchronized byte getDSN() {
+    private byte getDSN() {
         return macDSN++;
     }
 
@@ -347,6 +375,48 @@ abstract class MACBase implements I802_15_4_MAC, IProprietaryMAC {
         rxOnWhenIdle = false;
     }
 
+    /**
+     * Setup whether to filter packets based on a whitelist and
+     * if so parse the whitelist. Uses the system properties:
+     * radio.filter & radio.whitelist. The whitelist is a comma
+     * separated list of radio addresses, where only the low part
+     * of the addresses need to be specified, 
+     * e.g. 1234 = 0014.4F01.0000.1234
+     */
+    public void resetFiltering() {
+        filterPackets = false;
+        if ("true".equalsIgnoreCase(Utils.getSystemProperty("radio.filter",
+                                    Utils.getManifestProperty("radio-filter", "false")))) {
+            String addrList = Utils.getSystemProperty("radio.whitelist",
+                                    Utils.getManifestProperty("radio-whitelist", null));
+                filterWhitelist = true;
+            if (addrList == null || addrList.length() < 1) {
+                filterWhitelist = false;
+                addrList = Utils.getSystemProperty("radio.blacklist",
+                                    Utils.getManifestProperty("radio-blacklist", null));
+            }
+            // comma separated list of LSBs: 0117, 29e2, 51.047A
+            if (addrList != null && addrList.trim().length() > 1) {
+                System.out.println("*** Radio will " + (filterWhitelist ? "only handle" : "ignore") + " packets received from: ");
+                String addresses[] = Utils.split(addrList, ',');
+                filterList = new long[addresses.length];
+                for (int i = 0; i < addresses.length; i++) {
+                    String addr = addresses[i].trim();
+                    try {
+                        filterList[i] = IEEEAddress.toLong("0014.4F01.0000.0000".substring(0, 19 - addr.length()) + addr);
+                        System.out.println("***    " + IEEEAddress.toDottedHex(filterList[i]));
+                        filterPackets = true;
+                    } catch (IllegalArgumentException ex) {
+                        System.out.println("Error: radio.whitelist badly formed: " + addr);
+                        filterList[i] = 0;
+                    }
+                }
+            } else {
+                filterPackets = false;
+            }
+        }
+    }
+    
     /**
      * Make the dispatcher thread a daemon.
      * @param dispatcherThread
@@ -363,7 +433,79 @@ abstract class MACBase implements I802_15_4_MAC, IProprietaryMAC {
      */
     private class ReceiveThread extends Thread {
 
+        public ReceiveThread() {
+            super("MAC ReceiveThread");
+        }
+
         public void run() {
+            if (filterPackets) {            // call different routines so that
+                receiveWithFilter();        // if we are not filtering packets
+            } else {                        // we do not need an extra "if" in
+                receiveAll();               // the inner loop of the radio code
+            }
+        }
+        
+        private void receiveAll() {  // make sure any changes get mirrored in receiveWithFilter()
+            while (true) {
+                RadioPacket recvPacket = RadioPacket.getDataPacket();
+                try {
+                    dataIndication(recvPacket);
+                    try {
+                        recvPacket.decodeFrameControl();
+                        if (recvPacket.isData()) {
+                            if (awaitingAck) {
+//                                Utils.log("Received data packet when awaiting ACK");
+//                                Utils.log("Size = " + recvPacket.getLength());
+//                                Utils.log(Utils.stringify(recvPacket.buffer));
+                            }
+                            validateDestAddr(recvPacket);
+//				Utils.log("rx dsn =" + recvPacket.getDataSequenceNumber() + " " + System.currentTimeMillis() + " " + Thread.currentThread().getPriority());
+                            if (recvPacket.getDestinationAddress() == extendedAddress || isRxQueueUnderLowerLimit()) {
+                                rxDataQueue().put(recvPacket);
+                            }
+                            if (isRxQueueOverUpperLimit()) {
+                                disableRx();
+                            }
+                        } else if (recvPacket.isAck()) {
+                            synchronized (ackMonitor) {
+                                if (awaitingAck) {
+                                    if (recvPacket.getDataSequenceNumber() == ackDSN) {
+                                        lastAck = recvPacket;
+                                        awaitingAck = false;
+                                        ackMonitor.notify();
+                                    } else {
+                                        wrongAck++;
+                                    }
+                                } else {
+//                                    Utils.log("Discarding an ack with dsn " + recvPacket.getDataSequenceNumber());
+                                }
+                            }
+                        } else {
+                            resetRx();
+                            rxError++;
+                            dump();
+                            // this was a throw of a new MACException, but as long as we catch it below why bother
+                            System.err.println("RX error: Unknown packet type received: frame type =" + Integer.toHexString(recvPacket.getFrameControl()));
+                        }
+                    } catch (IllegalStateException badlyFormattedPacketException) {
+                        System.err.println("RX error: " + badlyFormattedPacketException.getMessage());
+                        rxError++;
+                    } catch (MACException e) {
+                        System.err.println("RX error: " + e.getMessage());
+                        rxError++;
+                    }
+                } catch (Throwable e) {
+                    System.err.println("RX thread error: " + e.getMessage());
+                    rxError++;
+                }
+            }
+        }
+
+        /**
+         * Same as receiveAll() except before queuing a received packet first check
+         * that it was sent by a SPOT whose address is on our whitelist.
+         */
+        private void receiveWithFilter() {
             while (true) {
                 RadioPacket recvPacket = RadioPacket.getDataPacket();
                 try {
@@ -377,32 +519,56 @@ abstract class MACBase implements I802_15_4_MAC, IProprietaryMAC {
                             validateDestAddr(recvPacket);
 //				Utils.log("rx dsn =" + recvPacket.getDataSequenceNumber() + " " + System.currentTimeMillis() + " " + Thread.currentThread().getPriority());
                             if (recvPacket.getDestinationAddress() == extendedAddress || isRxQueueUnderLowerLimit()) {
-                                rxDataQueue().put(recvPacket);
+                                if (filterPackets) {
+                                    long sourceAddr = recvPacket.getSourceAddress();
+                                    boolean match = false;
+                                    for (int i = 0; i < filterList.length; i++) {
+                                        if (filterList[i] == sourceAddr) {
+                                            match = true;
+                                            break;
+                                        }
+                                    }
+                                    if (!(filterWhitelist ^ match)) {
+                                        rxDataQueue().put(recvPacket);
+                                    }
+                                } else {
+                                    rxDataQueue().put(recvPacket);
+                                }
                             }
                             if (isRxQueueOverUpperLimit()) {
                                 disableRx();
                             }
-                        } else if (!recvPacket.isAck()) {
-                            dump();
-                            throw new MACException("Unknown packet type received: frame type =" + recvPacket.getFrameControl());
-                        } else {
+                        } else if (recvPacket.isAck()) {
                             synchronized (ackMonitor) {
                                 if (awaitingAck) {
-                                    lastAck = recvPacket;
-                                    awaitingAck = false;
-                                    ackMonitor.notify();
+                                    if (recvPacket.getDataSequenceNumber() == ackDSN) {
+                                        lastAck = recvPacket;
+                                        awaitingAck = false;
+                                        ackMonitor.notify();
+                                    } else {
+                                        wrongAck++;
+                                    }
                                 } else {
 //                                  Utils.log("Discarding an ack with dsn " + recvPacket.getDataSequenceNumber());
                                 }
                             }
+                        } else {
+                            resetRx();
+                            rxError++;
+                            dump();
+                            // this was a throw of a new MACException, but as long as we catch it below why bother
+                            System.err.println("RX error: Unknown packet type received: frame type =" + Integer.toHexString(recvPacket.getFrameControl()));
                         }
                     } catch (IllegalStateException badlyFormattedPacketException) {
                         System.err.println("RX error: " + badlyFormattedPacketException.getMessage());
+                        rxError++;
                     } catch (MACException e) {
                         System.err.println("RX error: " + e.getMessage());
+                        rxError++;
                     }
                 } catch (Throwable e) {
                     System.err.println("RX thread error: " + e.getMessage());
+                    rxError++;
                 }
             }
         }
@@ -424,11 +590,29 @@ abstract class MACBase implements I802_15_4_MAC, IProprietaryMAC {
         return wrongAck;
     }
 
-    private RadioPacket waitForAckPacket() {
+	public int getRxError() {
+		return rxError;
+	}
+
+    public int getNullPacketAfterAckWait() {
+        return nullPacketAfterAckWait;
+    }
+
+    public void resetErrorCounters() {
+        nullPacketAfterAckWait = 0;
+		channelAccessFailure = 0;
+        noAck = 0;
+        wrongAck = 0;
+        rxError = 0;
+	}
+
+
+    private RadioPacket waitForAckPacket(byte myDSN) {
         synchronized (ackMonitor) {
             if (lastAck != null) {
                 throw new SpotFatalException("ACK already there when about to wait for it");
             }
+            ackDSN = myDSN;
             awaitingAck = true;
             try {
                 ackMonitor.wait(10);
@@ -442,11 +626,9 @@ abstract class MACBase implements I802_15_4_MAC, IProprietaryMAC {
         return result;
     }
 
-    public int getNullPacketAfterAckWait() {
-        return nullPacketAfterAckWait;
-    }
-
     protected abstract void disableRx();
+
+    protected abstract void resetRx();
 
     protected void rxOnWhenIdleChanged() throws PHY_InvalidParameterException {
         if (isRxOnDesired() && !isRxQueueOverUpperLimit()) {

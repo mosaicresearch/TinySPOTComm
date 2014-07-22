@@ -42,7 +42,7 @@ public abstract class AbstractAT91_PIO implements IAT91_PIO {
     protected static final int PIO_CODR	= 13;          /* Clear Output Data Register */
     protected static final int PIO_PDSR	= 15;          /* Pin Data Status Register */
 
-    private static final int[] BASE_ADDRESS = {
+    static final int[] BASE_ADDRESS = {
     	0xFFFFF400,
     	0xFFFFF600,
     	0xFFFFF800,

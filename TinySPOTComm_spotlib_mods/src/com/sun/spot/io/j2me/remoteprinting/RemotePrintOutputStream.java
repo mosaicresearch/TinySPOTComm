@@ -44,6 +44,7 @@ import com.sun.spot.peripheral.radio.RadioPolicy;
 public class RemotePrintOutputStream extends OutputStream {
 
     private OutputStream out;
+    private boolean recursing = false;
 
     /**
      * Creates a new RemotePrintOutputStream piping its output to a new RadioOutputStream.
@@ -72,10 +73,19 @@ public class RemotePrintOutputStream extends OutputStream {
         	if (out != null) {  // out may be null if the stream has been closed. This will happen if, for example
         						// it is shared between System.out and System.err and one has already detected that
         						// the remote Host has gone away.
-				out.write(arg0);
-				if (arg0 == '\n') {
-				    out.flush();
-				}
+                if (recursing) {
+                    return;     // ignore any messages printed because of prior write
+                } else {
+                    try {
+                        recursing = true;
+                        out.write(arg0);
+                        if (arg0 == '\n') {
+                            out.flush();
+                        }
+                    } finally {
+                        recursing = false;
+                    }
+                }
         	}
 		} catch (IOException e) {
 			RemotePrintManager.getInstance().cancelRedirect();

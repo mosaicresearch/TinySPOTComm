@@ -69,6 +69,7 @@ public interface IRoutingManager extends IService {
      * initiates/receives supported route events
      *
      * @param listener object that is notified when route events occur
+     * @deprecated use addEventListener()
      */
     public void registerEventListener(IMHEventListener listener);
 
@@ -76,7 +77,23 @@ public interface IRoutingManager extends IService {
      * Deregisters an application etc. that was registered for route events
      *
      * @param listener object that is notified when route events occur
+     * @deprecated use removeEventListener()
      */
     public void deregisterEventListener(IMHEventListener listener);
+
+    /**
+     * Registers an event listener that is notified when this node
+     * initiates/receives supported route events
+     *
+     * @param listener object that is notified when route events occur
+     */
+    public void addEventListener(IMHEventListener listener);
+
+    /**
+     * Remove the specified event listener that was registered for route events
+     *
+     * @param listener object that is notified when route events occur
+     */
+    public void removeEventListener(IMHEventListener listener);
 
 }

@@ -508,6 +508,11 @@ public class RadioPacket {
 		return rssi;
 	}
 
+    void setMaxQuality() {
+        rssi = 60;
+        corr = 110;
+    }
+
 	/**
 	 * Answer whether the DSN received implies that packets were missed
 	 * @return true if the sequence number is correct, false if packets were missed (incorrect sequence number)

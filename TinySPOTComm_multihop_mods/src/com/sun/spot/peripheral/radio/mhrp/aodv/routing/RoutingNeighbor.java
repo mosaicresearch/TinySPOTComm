@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -42,7 +42,7 @@ public class RoutingNeighbor extends Thread {
     private boolean keepRunning = true;
     
     /**
-     * constructs a new routing table cleaner
+     * Constructs a new routing table advertiser
      */
     public RoutingNeighbor(ILowPan lp, long address) {
     	super("Routing Neighbor");
@@ -52,9 +52,8 @@ public class RoutingNeighbor extends Thread {
     }
     
     /**
-     * calls the routingTable.cleanTable() method every 
-     * Constants.ROUTING_TABLE_CLEANER_SLEEP_TIME. This is 8000 milisec in the
-     * current implementation
+     * Periodically broadcast a new route advertisement (RREP)
+     * to keep our route active in neighbors.
      */
     public void run() {
         RREQ reqMessage;

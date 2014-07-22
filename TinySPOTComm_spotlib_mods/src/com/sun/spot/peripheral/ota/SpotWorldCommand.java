@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2007-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -24,6 +24,7 @@
 
 package com.sun.spot.peripheral.ota;
 
+import com.sun.spot.service.ISpotRadioHelper;
 import com.sun.spot.imp.MIDletDescriptor;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
@@ -33,17 +34,32 @@ import java.util.Enumeration;
 import java.util.Hashtable;
 
 import com.sun.spot.imp.MIDletSuiteDescriptor;
+// import com.sun.spot.io.j2me.radiogram.Radiogram;
+// import com.sun.spot.io.j2me.radiogram.RadiogramConnection;
+import com.sun.spot.peripheral.IMultipleHopConnection;
 import com.sun.spot.peripheral.IPowerController;
+import com.sun.spot.peripheral.IRadioControl;
 import com.sun.spot.peripheral.ISleepManager;
+import com.sun.spot.peripheral.ITimeoutableConnection;
 import com.sun.spot.peripheral.IUSBPowerDaemon;
 import com.sun.spot.peripheral.Spot;
+import com.sun.spot.peripheral.TimeoutException;
+import com.sun.spot.peripheral.radio.RadioFactory;
+import com.sun.spot.peripheral.radio.routing.RouteInfo;
+import com.sun.spot.service.ServiceRegistry;
+import com.sun.spot.util.IEEEAddress;
 import com.sun.spot.util.Properties;
 import com.sun.spot.util.Utils;
 import com.sun.squawk.VM;
 import com.sun.squawk.util.StringTokenizer;
+import java.util.Vector;
+import javax.microedition.io.Connector;
+import javax.microedition.io.Datagram;
+import javax.microedition.io.DatagramConnection;
 
 /**
- *
+ * Provides support for executing commands from Solarium (formerly called SpotWorld).
+ * 
  * @author vgupta
  */
 public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
@@ -57,29 +73,35 @@ public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
     private static final int SECURITY_LEVEL_REQUIRE_OWNERSHIP = 2;
     private static final int SECURITY_LEVEL_ALLOW_ANYONE      = 4;
 
+    private static int pingCounter = 1;
+
     /** Creates a new instance of SpotWorldCommand */
     public SpotWorldCommand() {
     }
     
     public int getSecurityLevelFor(String command) {
-        if (command.equals(GET_MEMORY_STATS_CMD) ||
+        if (    command.equals(GET_MEMORY_STATS_CMD) ||
                 command.equals(GET_POWER_STATS_CMD) ||
                 command.equals(GET_SLEEP_INFO_CMD) ||
                 command.equals(GET_AVAILABLE_SUITES_CMD) ||
                 command.equals(GET_SUITE_MANIFEST_CMD) ||
                 command.equals(GET_APP_STATUS_CMD) ||
-                command.equals(GET_ALL_APPS_STATUS_CMD)) {
+                command.equals(GET_ALL_APPS_STATUS_CMD) ||
+                command.equals(REMOTE_GET_PHYS_NBRS_CMD) ||
+                command.equals(GET_RADIO_INFO_CMD) ||
+                command.equals(GET_ROUTE_CMD) ) {
             return SECURITY_LEVEL_ALLOW_ANYONE;
         }
         
-        if (command.equals(START_APP_CMD) ||
+        if (    command.equals(START_APP_CMD) ||
                 command.equals(PAUSE_APP_CMD) ||
                 command.equals(RESUME_APP_CMD) ||
                 command.equals(STOP_APP_CMD) ||
                 command.equals(START_REMOTE_PRINTING_CMD) ||
                 command.equals(STOP_REMOTE_PRINTING_CMD) ||
+                command.equals(SET_RADIO_INFO_CMD) ||
                 command.equals(RECEIVE_APP_CMD) ||
-                command.equals(MIGRATE_APP_CMD)) {
+                command.equals(MIGRATE_APP_CMD) ) {
             return SECURITY_LEVEL_REQUIRE_OWNERSHIP;
         }
         
@@ -88,13 +110,12 @@ public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
 
     public boolean processCommand(String command, DataInputStream params, 
             IOTACommandHelper helper) throws IOException {
-        boolean result = false;
+        boolean result = true;
         byte[] encodedResponse = null;
         String suiteId = null;
         int midletId = 0;
         String isolateId = null;
         String res = null;
-        
         
         if (command.equals(GET_MEMORY_STATS_CMD)) {
             // Utils.log("getmemstats called");
@@ -115,16 +136,10 @@ public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
             } catch (Exception e) {
                 System.err.println("getmemstats caught " + e);
                 e.printStackTrace();
-                helper.sendErrorDetails("Failed: " +
-                        "getmemstats caught " + e);
+                helper.sendErrorDetails("Failed: " + "getmemstats caught " + e);
             }
                         
-            helper.sendData(encodedResponse, 0, encodedResponse.length);
-            helper.sendPrompt();
-            result = true; // command was recognized
-        }
-        
-        if (command.equals(GET_POWER_STATS_CMD)) {
+        } else if (command.equals(GET_POWER_STATS_CMD)) {
             // Utils.log("getpowerstats called");
             try {
                 encodedResponse = createPowerStatsResponse();
@@ -135,12 +150,7 @@ public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
                         "getpowerstats caught " + e);
             }
             
-            helper.sendData(encodedResponse, 0, encodedResponse.length);
-            helper.sendPrompt();
-            result = true; // command was recognized
-        }
-        
-        if (command.equals(GET_SLEEP_INFO_CMD)) {
+        } else if (command.equals(GET_SLEEP_INFO_CMD)) {
             // Utils.log("getsleepinfo called");
             try {                
                 // Create a response ...
@@ -152,12 +162,7 @@ public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
                         "getsleepinfo caught " + e);
             }
             
-            helper.sendData(encodedResponse, 0, encodedResponse.length);
-            helper.sendPrompt();
-            result = true; // command was recognized
-        }
-        
-        if (command.equals(GET_AVAILABLE_SUITES_CMD)) {
+        } else if (command.equals(GET_AVAILABLE_SUITES_CMD)) {
             // Utils.log("getavailablesuites called");
             try {
                 // Create a response ...
@@ -169,12 +174,7 @@ public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
                         "getavailablesuites caught " + e);
             }
             
-            helper.sendData(encodedResponse, 0, encodedResponse.length);
-            helper.sendPrompt();
-            result = true; // command was recognized
-        }
-        
-        if (command.equals(GET_SUITE_MANIFEST_CMD)) {
+        } else if (command.equals(GET_SUITE_MANIFEST_CMD)) {
             // Utils.log("getsuitemanifest called");
             try {
                 suiteId = params.readUTF();
@@ -190,12 +190,7 @@ public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
                         "getsuitemanifest caught " + e);
             }
             
-            helper.sendData(encodedResponse, 0, encodedResponse.length);
-            helper.sendPrompt();
-            result = true; // command was recognized
-        }
-        
-        if (command.equals(START_APP_CMD)) {
+        } else if (command.equals(START_APP_CMD)) {
             // Utils.log("startapp called");
             try {
                 suiteId = params.readUTF();
@@ -213,12 +208,7 @@ public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
             
             encodedResponse = createResponse(res);
             
-            helper.sendData(encodedResponse, 0, encodedResponse.length);
-            helper.sendPrompt();
-            result = true; // command was recognized
-        }
-        
-        if (command.equals(PAUSE_APP_CMD)) {
+        } else if (command.equals(PAUSE_APP_CMD)) {
             // Utils.log("pauseapp called");
             try {
                 isolateId = params.readUTF();                
@@ -234,12 +224,7 @@ public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
             
             encodedResponse = createResponse(res);
             
-            helper.sendData(encodedResponse, 0, encodedResponse.length);
-            helper.sendPrompt();
-            result = true; // command was recognized
-        }
-        
-        if (command.equals(RESUME_APP_CMD)) {
+        } else if (command.equals(RESUME_APP_CMD)) {
             // Utils.log("resumeapp called");
             try {
                 isolateId = params.readUTF();                
@@ -256,12 +241,7 @@ public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
             
             encodedResponse = createResponse(res);
             
-            helper.sendData(encodedResponse, 0, encodedResponse.length);
-            helper.sendPrompt();
-            result = true; // command was recognized
-        }
-        
-        if (command.equals(STOP_APP_CMD)) {
+        } else if (command.equals(STOP_APP_CMD)) {
             // Utils.log("stopapp called");
             try {
                 isolateId = params.readUTF();
@@ -278,12 +258,7 @@ public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
             
             encodedResponse = createResponse(res);
             
-            helper.sendData(encodedResponse, 0, encodedResponse.length);
-            helper.sendPrompt();
-            result = true; // command was recognized
-        }
-        
-        if (command.equals(GET_ALL_APPS_STATUS_CMD)) {
+        } else if (command.equals(GET_ALL_APPS_STATUS_CMD)) {
             // Utils.log("getallappsstatus called");
             try {
                 // Create a response ...
@@ -295,12 +270,7 @@ public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
                 encodedResponse = createAllAppsStatusResponse(null);
             }
             
-            helper.sendData(encodedResponse, 0, encodedResponse.length);
-            helper.sendPrompt();
-            result = true; // command was recognized
-        }
-        
-        if (command.equals(GET_APP_STATUS_CMD)) {
+        } else if (command.equals(GET_APP_STATUS_CMD)) {
             // Utils.log("getappstatus called");
             try {
                 isolateId = params.readUTF();
@@ -317,13 +287,7 @@ public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
             
             encodedResponse = createResponse(res);
             
-            helper.sendData(encodedResponse, 0, encodedResponse.length);
-            helper.sendPrompt();
-            result = true; // command was recognized
-            
-        }
-
-        if (command.equals(START_REMOTE_PRINTING_CMD)) {
+        } else if (command.equals(START_REMOTE_PRINTING_CMD)) {
             // Utils.log("startremoteprinting called");
             try {
                 isolateId = params.readUTF();
@@ -342,12 +306,7 @@ public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
             
             encodedResponse = createResponse(res);
             
-            helper.sendData(encodedResponse, 0, encodedResponse.length);
-            helper.sendPrompt();
-            result = true; // command was recognized
-        }
-
-        if (command.equals(STOP_REMOTE_PRINTING_CMD)) {
+        } else if (command.equals(STOP_REMOTE_PRINTING_CMD)) {
             // Utils.log("startremoteprinting called");
             try {
                 isolateId = params.readUTF();
@@ -368,12 +327,7 @@ public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
             
             encodedResponse = createResponse(res);
             
-            helper.sendData(encodedResponse, 0, encodedResponse.length);
-            helper.sendPrompt();
-            result = true; // command was recognized
-        }
-
-        if (command.equals(MIGRATE_APP_CMD)) {
+        } else if (command.equals(MIGRATE_APP_CMD)) {
             // Utils.log("migrateapp called");
             try {
                 isolateId = params.readUTF();
@@ -394,12 +348,7 @@ public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
             
             encodedResponse = createResponse(res);
             
-            helper.sendData(encodedResponse, 0, encodedResponse.length);
-            helper.sendPrompt();
-            result = true; // command was recognized
-        }
-        
-        if (command.equals(RECEIVE_APP_CMD)) {
+        } else if (command.equals(RECEIVE_APP_CMD)) {
             // Utils.log("receiveapp called");
             try {
                 isolateId = params.readUTF();
@@ -418,12 +367,7 @@ public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
             
             encodedResponse = createResponse(res);
             
-            helper.sendData(encodedResponse, 0, encodedResponse.length);
-            helper.sendPrompt();
-            result = true; // command was recognized
-        }
-
-        if (command.equals(GET_SPOT_PROPERTY_CMD)) {
+        } else if (command.equals(GET_SPOT_PROPERTY_CMD)) {
             // Utils.log("getspotproperty called");
             try {
                 String listOfKeys = params.readUTF();
@@ -439,11 +383,41 @@ public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
                         "getspotproperty caught " + e);
             }
             
+        } else if (command.equals(REMOTE_GET_PHYS_NBRS_CMD)) {
+            try {
+                encodedResponse = createRemotePingResponse();
+            } catch (Exception e) {
+                System.err.println("Error doing a remote Ping: " + e);
+                encodedResponse = createResponse("Failed: remote Ping caught " + e);
+            }
+
+        } else if (command.equals(GET_ROUTE_CMD)) {
+            try {
+                long dest = params.readLong();
+
+                encodedResponse = createGetRouteResponse(dest);
+            } catch (Exception e) {
+                System.err.println("Error doing get route: " + e);
+                encodedResponse = createResponse("Failed: getRoute caught " + e);
+            }
+
+        } else if (command.equals(GET_RADIO_INFO_CMD)) {
+            try {
+                encodedResponse = createGetRadioInfoResponse();
+            } catch (Exception e) {
+                System.err.println("Error doing get radio info: " + e);
+                encodedResponse = createResponse("Failed: getRadioInfo caught " + e);
+            }
+
+        } else {
+            result = false; // command was not recognized
+        }
+
+        if (result) {
             helper.sendData(encodedResponse, 0, encodedResponse.length);
             helper.sendPrompt();
-            result = true; // command was recognized
         }
-        
+
         return result;
     }
     
@@ -455,12 +429,13 @@ public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
         
         // 2 bytes of version, 2 bytes of rev string length, pctrl 
         // rev string, followed by 11 short values followed by a long value
+        // followed by a boolean followed by a short
         byte[] val = new byte[2 + 2 + pctrlRevbytes.length +
-                11 * 2 + 8 + 1];
+                11 * 2 + 8 + 1 + 2];
         int idx = 0;
         
         val[idx++] = (byte) MAJOR_VERSION;
-        val[idx++] = (byte) (MINOR_VERSION + 1); // externallyPowered flag added
+        val[idx++] = (byte) (MINOR_VERSION + 2); // externallyPowered flag added, pctcharge added
         
         Utils.writeBigEndShort(val, idx, pctrlRevbytes.length);
         idx += 2;
@@ -492,6 +467,8 @@ public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
         idx += 8;
         // First added in version 1.1
         val[idx++] = (byte) (usbpd.isUsbPowered() ? 1 : 0);
+        Utils.writeBigEndShort(val, idx, (short) pctrl.getBattery().getBatteryLevel());
+        idx += 2;
         return val;
     }
 
@@ -580,7 +557,7 @@ public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
         System.arraycopy(strbytes, 0, val, idx, strbytes.length);
         idx += strbytes.length;
 
-        return val;       
+        return val;
     }
 
     private byte[] createSuiteManifestResponse(String suiteId) throws Exception {
@@ -690,4 +667,171 @@ public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
         
         return baos.toByteArray();
     }
+
+    public static class PingReply {
+        public long addr;
+        public byte linkQualityReq;
+        public byte linkQualityReply;
+        public byte linkStrengthReq;
+        public byte linkStrengthReply;
+
+        public PingReply(long addr, byte linkQualityReq, byte linkQualityReply, byte linkStrengthReq, byte linkStrengthReply) {
+            this.addr = addr;
+            this.linkQualityReq = linkQualityReq;
+            this.linkQualityReply = linkQualityReply;
+            this.linkStrengthReq = linkStrengthReq;
+            this.linkStrengthReply = linkStrengthReply;
+        }
+    }
+
+    public static Vector doRemoteGetPhysicalNeighbors() {
+        ISpotRadioHelper radioManager = (ISpotRadioHelper)(ServiceRegistry.getInstance().lookup(ISpotRadioHelper.class));
+        Vector results = new Vector();
+		DatagramConnection inConn = null;
+        DatagramConnection outConn = null;
+        
+		try {
+            inConn = (DatagramConnection) Connector.open(radioManager.getDatagramConnectionProtocol() + "://");
+            byte port = ((IRadioControl) inConn).getLocalPort();
+            ((ITimeoutableConnection) inConn).setTimeout(1000);
+            Datagram incoming = inConn.newDatagram(128);
+            outConn = (DatagramConnection) Connector.open(radioManager.getDatagramConnectionProtocol() + "://broadcast:" +
+                    OTACommandServer.DEFAULT_DATAGRAM_PORT);
+            ((IMultipleHopConnection) outConn).setMaxBroadcastHops(1);
+            Datagram outgoing = outConn.newDatagram(64);
+            outgoing.writeUTF(IOTACommandServer.HELLO_CMD);
+            outgoing.writeByte(IOTACommandServer.PHYSICAL_NEIGHBORS_HELLO_TYPE);
+            outgoing.writeInt(pingCounter++);
+            outgoing.writeByte(port);
+            outConn.send(outgoing);
+            // System.out.println("Sending remote ping....")
+nextPing:
+            while (true) {
+				try {
+					inConn.receive(incoming);
+                    // System.out.println("   received ping reply from " + incoming.getAddressAsLong());
+                    int majorVersion = incoming.readByte();
+                    int minorVersion = incoming.readByte();
+                    if (incoming.readByte() == IOTACommandServer.PHYSICAL_NEIGHBORS_HELLO_TYPE &&
+                            (pingCounter - 1) == incoming.readInt()) {
+                        PingReply pr = new PingReply(IEEEAddress.toLong(incoming.getAddress()),
+                                                     incoming.readByte(),
+                                               (byte)radioManager.getLinkQuality(incoming),
+                                (majorVersion > 3 || (majorVersion == 3 && minorVersion > 0)) ? incoming.readByte() : -1,
+                                               (byte)radioManager.getLinkStrength(incoming));
+                        for (int i = 0; i < results.size(); i++) {
+                            if (((PingReply)results.elementAt(i)).addr ==
+                                    IEEEAddress.toLong(incoming.getAddress())) {
+                                continue nextPing;
+                            }
+                        }
+                        results.addElement(pr);
+                    }
+				} catch (TimeoutException e) {
+					break;
+				}
+			}
+        } catch (IOException ex) {
+		} finally {
+            try {
+                if (inConn  != null) inConn.close();
+                if (outConn != null) outConn.close();
+            } catch (IOException ex) {
+                // ignore any error closing connections
+            }
+		}
+        return results;
+    }
+
+    private byte[] createRemotePingResponse() throws Exception {
+        ISpotRadioHelper radioManager = (ISpotRadioHelper)(ServiceRegistry.getInstance().lookup(ISpotRadioHelper.class));
+        if (radioManager == null || !radioManager.getDatagramConnectionProtocol().startsWith("radiogram")) {
+            byte[] res = {(byte) MAJOR_VERSION, (byte) MINOR_VERSION, 0, 0 };
+            return res;
+        }
+        Vector results = doRemoteGetPhysicalNeighbors();
+        byte[] result = new byte[results.size() * (8 + 4) + 2 + 2];
+        int idx = 0;
+        result[idx++] = (byte) MAJOR_VERSION;
+        result[idx++] = (byte) MINOR_VERSION;
+        Utils.writeBigEndShort(result, idx, results.size());
+        idx += 2;
+        for (int i = 0; i < results.size(); i++) {
+            PingReply pr = (PingReply)results.elementAt(i);
+            Utils.writeBigEndLong(result, idx, pr.addr);
+            idx += 8;
+            result[idx++] = pr.linkQualityReq;
+            result[idx++] = pr.linkQualityReply;
+            result[idx++] = pr.linkStrengthReq;
+            result[idx++] = pr.linkStrengthReply;
+        }
+		return result;
+    }
+
+    private byte[] createGetRadioInfoResponse() throws Exception {
+        int power = RadioFactory.getRadioPolicyManager().getOutputPower();
+        boolean filter = Utils.isOptionSelected("radio.filter", false);
+        String whiteList = System.getProperty("radio.whitelist");
+        String blackList = System.getProperty("radio.blacklist");
+        byte[] whitebytes = whiteList == null ? new byte[0] : whiteList.getBytes();
+        byte[] blackbytes = blackList == null ? new byte[0] : blackList.getBytes();
+        String name = "unknown";
+        boolean mutable = false;
+        ISpotRadioHelper radioManager = (ISpotRadioHelper)(ServiceRegistry.getInstance().lookup(ISpotRadioHelper.class));
+        if (radioManager != null) {
+            name = radioManager.getRoutingManagerName();
+            mutable = radioManager.isMutableRoutingManager();
+        }
+        byte[] strbytes = name.getBytes();
+        byte[] result = new byte[2 + 1 + 1 + 2 + whitebytes.length + 2 + blackbytes.length + 2 + strbytes.length + 1];
+        int idx = 0;
+        result[idx++] = (byte) MAJOR_VERSION;
+        result[idx++] = (byte) MINOR_VERSION;
+        result[idx++] = (byte) (power & 0xff);
+        result[idx++] = (byte) (filter ? 1 : 0);
+
+        Utils.writeBigEndShort(result, idx, whitebytes.length);
+        idx += 2;
+        System.arraycopy(whitebytes, 0, result, idx, whitebytes.length);
+        idx += whitebytes.length;
+        Utils.writeBigEndShort(result, idx, blackbytes.length);
+        idx += 2;
+        System.arraycopy(blackbytes, 0, result, idx, blackbytes.length);
+        idx += blackbytes.length;
+
+        Utils.writeBigEndShort(result, idx, strbytes.length);
+        idx += 2;
+        System.arraycopy(strbytes, 0, result, idx, strbytes.length);
+        idx += strbytes.length;
+        result[idx++] = (byte) (mutable ? 1 : 0);
+		return result;
+    }
+
+    private byte[] createGetRouteResponse(long dest) throws Exception {
+        byte[] noRoute = {(byte) MAJOR_VERSION, (byte) MINOR_VERSION, 0, 0};
+        ISpotRadioHelper radioManager = (ISpotRadioHelper)(ServiceRegistry.getInstance().lookup(ISpotRadioHelper.class));
+        if (radioManager == null) {
+            return noRoute;
+        }
+        RouteInfo[] ri = (dest == -1) ? radioManager.getRouteInfo() : radioManager.getRouteInfo(dest);
+        if (ri == null || ri.length == 0) {
+            return noRoute;
+        }
+        byte[] result = new byte[2 + 2 + ri.length * (8 + 8 + 2)];
+        int idx = 0;
+        result[idx++] = (byte) MAJOR_VERSION;
+        result[idx++] = (byte) MINOR_VERSION;
+        Utils.writeBigEndShort(result, idx, ri.length);
+        idx += 2;
+        for (int i = 0; i < ri.length; i++) {
+            Utils.writeBigEndLong(result, idx, ri[i].destination);
+            idx += 8;
+            Utils.writeBigEndLong(result, idx, ri[i].nextHop);
+            idx += 8;
+            Utils.writeBigEndShort(result, idx, ri[i].hopCount);
+            idx += 2;
+        }
+		return result;
+    }
+
 }

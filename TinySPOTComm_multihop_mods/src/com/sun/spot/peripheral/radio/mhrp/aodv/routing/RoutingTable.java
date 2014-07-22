@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -221,9 +221,8 @@ public class RoutingTable {
         synchronized (table) {
             long expiryCutoff = System.currentTimeMillis() + Constants.EXPIRY_TIME_DELTA;
             RoutingEntry entry = (RoutingEntry) timeoutList.getFirstElement();
-            boolean entriesRemaining = true;
             
-            while ((entry != null) && entriesRemaining) {
+            while ((entry != null)) {
                 if (entry.expiryTime < expiryCutoff) {
                     timeoutList.removeFirstElement();
                     if (entry.activityFlag) {
@@ -242,7 +241,7 @@ public class RoutingTable {
                         table.remove(entry.key);
                     }
                 } else {
-                    entriesRemaining = false;
+                    break;
                 }
                 
                 entry = (RoutingEntry) timeoutList.getFirstElement();
@@ -317,6 +316,7 @@ public class RoutingTable {
                         }
                         timeoutList.insertElement(existingEntry);
                     } else {
+                        timeoutList.removeElement(existingEntry);
                         if (!existingEntry.routeUsers.isEmpty()) {
                             // Copy the users from the old list to the new list
                             copyUserList(existingEntry.routeUsers, newEntry.routeUsers);
@@ -440,7 +440,7 @@ public class RoutingTable {
     
     private void notifyCleaner() {
         synchronized (cleanerMonitor) {
-            cleanerMonitor.notify();
+            cleanerMonitor.notifyAll();
         }
     }
     
@@ -452,6 +452,9 @@ public class RoutingTable {
                 } catch (InterruptedException e) {
                     // ignore & continue
                 }
+            }
+            if (Thread.currentThread().getPriority() == Thread.MIN_PRIORITY) {
+                break;
             }
         }
     }

@@ -47,6 +47,23 @@ public interface IProprietaryMAC {
 	int getWrongAck();
 	
 	/**
+	 * @return the count of times we got a badly formed packet
+	 */
+	int getRxError();
+
+	/**
+	 * Reset the NullPacketAfterAckWait, ChannelAccessFailure, NoAck, WrongAck and RxError counters to zero.
+	 */
+	public void resetErrorCounters();
+
+    /**
+	 * Passthrough to allow direct access to the physical layer facility for setting the radio channel.
+	 *
+	 * @param channel number (between 11 and 26)
+	 */
+	void setPLMEChannel(int channel);
+
+    /**
 	 * Passthrough to allow direct access to the physical layer facility for setting the power.
 	 * 
 	 * @param power an integer in the range -32..+31

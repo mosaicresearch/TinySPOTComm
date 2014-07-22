@@ -32,7 +32,7 @@ package com.sun.spot.peripheral;
  * @author Syntropy
  */
 
-public interface ILTC3455 extends IDriver {
+public interface ILTC3455 {
 
 	/**
 	 * Set high power state. If the Spot is connected to USB and high power

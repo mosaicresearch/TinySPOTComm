@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -25,11 +25,42 @@
 package com.sun.spot.peripheral.handler;
 
 import com.sun.spot.peripheral.IEventHandler;
+import com.sun.spot.util.Utils;
 import com.sun.squawk.*;
 
-public class StopVMEventHandler implements IEventHandler {
+public class StopVMEventHandler implements IEventHandler, Runnable {
+
+    private static final int SHUTDOWN_MIN_TIME = 1500;
+    private static final int RESET_OVERRIDE = 2;
+    private static int stopCount = 0;
+    private static long stopTime;
+
+    private boolean halt = false;
 
 	public void signalEvent() {
-		VM.stopVM(0);
-	}
+        if (stopCount++ == 0) {
+            stopTime = System.currentTimeMillis();
+            Thread t = new Thread(this);
+            t.setPriority(Thread.MAX_PRIORITY);
+            t.start();  // don't define an anonymous class or else make sure emulator loads it
+            Thread.yield();
+            StopVMEventHandler backup = new StopVMEventHandler();
+            backup.halt = true;
+            t = new Thread(backup);
+            t.setPriority(Thread.MAX_PRIORITY);
+            Thread.yield();
+        } else if (stopCount > RESET_OVERRIDE || (System.currentTimeMillis() - stopTime) > SHUTDOWN_MIN_TIME) {
+            VM.haltVM(0);
+	    }
+    }
+
+    public void run() {
+        if (halt) {
+            Utils.sleep(SHUTDOWN_MIN_TIME);
+            VM.haltVM(0);
+        } else {
+            VM.stopVM(0);
+        }
+    }
+
 }

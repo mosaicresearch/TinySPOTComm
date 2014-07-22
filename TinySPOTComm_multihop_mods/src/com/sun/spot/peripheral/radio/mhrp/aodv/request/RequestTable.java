@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -34,7 +34,6 @@ import com.sun.spot.peripheral.radio.mhrp.aodv.Constants;
 import com.sun.spot.peripheral.radio.mhrp.aodv.messages.RREP;
 import com.sun.spot.peripheral.radio.mhrp.aodv.messages.RREQ;
 import com.sun.spot.peripheral.radio.routing.interfaces.RouteEventClient;
-import com.sun.spot.util.IEEEAddress;
 import java.util.Random;
 
 /**
@@ -60,7 +59,7 @@ public class RequestTable {
         Random rnd = new Random();
         timeoutList = new SortedList();
         table = new Hashtable();
-        currentRREQID = (rnd.nextInt(65535));  // start with a limited random seq number
+        currentRREQID = rnd.nextInt(65535) + 1;  // start with a limited random seq number in [1,65535]
         cleanerMonitor = new Object();
     }
 
@@ -125,7 +124,7 @@ public class RequestTable {
         entry.uniqueKey = uniqueKey;
         synchronized (table) {
             Object o = table.get(wantedDestination);
-            if (o != null) {                               
+            if (o != null) {
                 if (o instanceof Vector) {
                     // if there are already 2 or more entries, we must add it to
                     // the vector
@@ -153,8 +152,56 @@ public class RequestTable {
         notifyCleaner();
         return true;
     }
-    
-    /**  
+
+    /**
+     * Helper function to search for an existing (active) entry
+     * @param destAddr
+     * @param origAddr
+     * @param reqID  if non-zero then must match request ID
+     * @param active if true then only match active requests
+     * @return the request entry that is a match if found
+     */
+    public RequestEntry findRequest(long destAddr, long origAddr, int reqID, boolean active) {
+
+        Long wantedDestination = new Long(destAddr);
+        RequestEntry returnVal = null;
+
+        synchronized(table) {
+            if (!active) {
+                cleanTable();
+            }
+            Object o = table.get(wantedDestination);
+            if (o != null) {
+
+                if (o instanceof Vector) {
+                    Vector v = (Vector) o;
+
+                    Enumeration e = v.elements();
+                    while (e.hasMoreElements()) {
+                        RequestEntry entry = (RequestEntry) e.nextElement();
+                        if ((entry.originatorMACAddress.longValue() == origAddr) &&
+                                (reqID == entry.requestID || reqID == 0) &&
+                                (!active || entry.activityFlag)) {
+                            returnVal = entry;
+                            break;
+                        }
+                    }
+                } else {
+                    RequestEntry entry = (RequestEntry) o;
+                    if ((entry.originatorMACAddress.longValue() == origAddr) &&
+                            (reqID == entry.requestID || reqID == 0) &&
+                            (!active || entry.activityFlag)) {
+                        returnVal = entry;
+                    }
+                }
+            }
+        }
+
+        return returnVal;
+    }
+
+
+    /**
      * this method tells the caller if the request table already has an entry for
      * the destination of this route request and it is currently active
      *
@@ -162,41 +209,10 @@ public class RequestTable {
      * @return hasActiveRequest
      */
     public boolean hasActiveRequest(RREQ message) {
-        
-        Long wantedDestination = new Long(message.getDestAddress());
-        boolean returnVal = false;
-        
-        synchronized(table) {
-            Object o = table.get(wantedDestination);
-            if (o != null) {
-                
-                if (o instanceof Vector) {
-                    Vector v = (Vector) o;
-                    
-                    Enumeration e = v.elements();
-                    boolean breakOut = false;
-                    while (e.hasMoreElements() && !breakOut) {
-                        RequestEntry entry = (RequestEntry) e.nextElement();
-                        if ((entry.originatorMACAddress.longValue() == message.getOrigAddress()) &&
-                                (entry.requestID == message.getRequestID())) {
-                            returnVal = entry.activityFlag;
-                            breakOut = true;
-                        }
-                    }
-                } else {
-                    RequestEntry entry = (RequestEntry) o;
-                    if ((entry.originatorMACAddress.longValue() == message.getOrigAddress()) &&
-                            (entry.requestID == message.getRequestID())) {
-                        returnVal = entry.activityFlag;
-                    }
-                }
-            }
-        }
-        
-        return returnVal;
-    }    
-    
-    /**  
+        return findRequest(message.getDestAddress(), message.getOrigAddress(), message.getRequestID(), true) != null;
+    }
+
+    /**
      * this method tells the caller if the request table already has an entry for
      * the destination of this route request and it is currently active
      *
@@ -204,36 +220,9 @@ public class RequestTable {
      * @return hasActiveRequest
      */
     public boolean hasActiveRequest(RREP message) {
-        
-        Long wantedDestination = new Long(message.getDestAddress());
-        boolean returnVal = false;
-        
-        synchronized(table) {
-            Object o = table.get(wantedDestination);
-            if (o != null) {
-                
-                if (o instanceof Vector) {
-                    Vector v = (Vector) o;
-                    
-                    Enumeration e = v.elements();
-                    boolean breakOut = false;
-                    while (e.hasMoreElements() && !breakOut) {
-                        RequestEntry entry = (RequestEntry) e.nextElement();
-                        if ((entry.originatorMACAddress.longValue() == message.getOrigAddress())) {
-                            returnVal |= entry.activityFlag;
-                        }
-                    }
-                } else {
-                    RequestEntry entry = (RequestEntry) o;
-                    if ((entry.originatorMACAddress.longValue() == message.getOrigAddress())) {                            
-                        returnVal = entry.activityFlag;
-                    }
-                }
-            }
-        }
-        
-        return returnVal;
+        return findRequest(message.getDestAddress(), message.getOrigAddress(), 0, true) != null;
     }        
+
     /**
      * this method tells the caller if the request table already has an entry for
      * the destination of this route request
@@ -241,43 +230,10 @@ public class RequestTable {
      * @param message
      * @return hasRequest
      */
-    // FIXME See if I can improve synchronization
     public boolean hasRequest(RREQ message) {
-        
-        Long wantedDestination = new Long(message.getDestAddress());
-        boolean returnVal = false;
-        
-        synchronized(table) {
-            Object o = table.get(wantedDestination);
-            if (o != null) {                
-                if (o instanceof Vector) {
-                    Vector v = (Vector) o;
-                    
-                    Enumeration e = v.elements();
-                    boolean breakOut = false;
-                    while (e.hasMoreElements() && !breakOut) {
-                        RequestEntry entry = (RequestEntry) e.nextElement();
-                        if ((entry.originatorMACAddress.longValue() == message.getOrigAddress()) &&
-                                (entry.requestID == message.getRequestID())) {
-                            returnVal = true;
-                            breakOut = true;
-                            //Debug.print("hasRequest: found RREQ ID" + entry.requestID, 1);
-                        }
-                    }
-                } else {
-                    RequestEntry entry = (RequestEntry) o;
-                    if ((entry.originatorMACAddress.longValue() == message.getOrigAddress()) &&
-                            (entry.requestID == message.getRequestID())) {
-                        //Debug.print("hasRequest: found RREQ ID" + entry.requestID, 1);
-                        returnVal = true;
-                    }
-                }
-            }
-        }
-        
-        return returnVal;
+        return findRequest(message.getDestAddress(), message.getOrigAddress(), message.getRequestID(), false) != null;
     }
-    
+
     /**
      * this method tells the caller if the request table already has an entry for
      * the destination of this route reply
@@ -285,52 +241,19 @@ public class RequestTable {
      * @param message
      * @return hasRequest
      */
-    // FIXME See if I can improve synchronization
     public boolean hasRequest(RREP message) {
-        Long wantedDestination = new Long(message.getDestAddress());
-        boolean returnVal = false;
-        
-        synchronized (table) {
-            Object o = table.get(wantedDestination);
-            if (o != null) {
-                
-                if (o instanceof Vector) {
-                    Vector v = (Vector) o;
-                    
-                    Enumeration e = v.elements();
-                    boolean breakOut = false;
-                    while (e.hasMoreElements() && !breakOut) {
-                        RequestEntry entry = (RequestEntry) e.nextElement();
-                        if ((entry.originatorMACAddress.longValue() == message.getOrigAddress())) {
-                            returnVal = true;
-                            breakOut = true;
-                            //Debug.print("hasRequest: found RREQ ID" + entry.requestID, 1);
-                        }
-                    }
-                } else {
-                    RequestEntry entry = (RequestEntry) o;
-                    if ((entry.originatorMACAddress.longValue() == message.getOrigAddress())) {
-                        //Debug.print("hasRequest: found RREQ ID" + entry.requestID, 1);
-                        returnVal = true;
-                    }
-                }
-            }
-        }
-        
-        return returnVal;
+        return findRequest(message.getDestAddress(), message.getOrigAddress(), 0, false) != null;
     }
-    
+
     /**
-     * this method an outstanding request from the table
+     * this method removes an outstanding request from the table
      *
      * @param destination
      * @param originator
-     * @return entry is null if there was no entry for this parameters
      */
     // FIXME See if I can improve synchronization
-    public Object removeOutstandingRequest(long destination, long originator) {
+    public void removeOutstandingRequest(long destination, long originator, int reqID) {
         Long wantedDestination = new Long(destination);
-        Object returnedKey = null;
         synchronized (table) {
             Object o = table.get(wantedDestination);
             if (o != null) {                
@@ -338,27 +261,26 @@ public class RequestTable {
                     Vector v = (Vector) o;
                     
                     Enumeration e = v.elements();
-                    boolean breakOut = false;
-                    while (e.hasMoreElements() && !breakOut) {
+                    while (e.hasMoreElements()) {
                         RequestEntry entry = (RequestEntry) e.nextElement();
-                        if (entry.originatorMACAddress.longValue() == originator) {
-                            breakOut = true;
+                        if (entry.originatorMACAddress.longValue() == originator &&
+                                (reqID == entry.requestID || reqID == 0)) {
                             v.removeElement(entry);
                             timeoutList.removeElement(entry);
-                            returnedKey = entry.uniqueKey;
+                            break;
                         }
+                    // if vector is now empty or has only 1 entry should we remove it?
                     }
                 } else {
                     RequestEntry entry = (RequestEntry) o;
-                    if (entry.originatorMACAddress.longValue() == originator) {
+                    if (entry.originatorMACAddress.longValue() == originator &&
+                            (reqID == entry.requestID || reqID == 0)) {
                         table.remove(wantedDestination);
                         timeoutList.removeElement(entry);
-                        returnedKey = entry.uniqueKey;
                     }
                 }
             }
         }
-        return returnedKey;
     }
     
     /**
@@ -369,12 +291,11 @@ public class RequestTable {
             long expiryCutoff =
                     System.currentTimeMillis() + Constants.EXPIRY_TIME_DELTA;
             RequestEntry entry = (RequestEntry) timeoutList.getFirstElement();
-            boolean elementsRemaining = true;
             
-            while (entry != null && elementsRemaining) { 
+            while (entry != null) { 
                 if (entry.expiryTime < expiryCutoff) {             
+                    timeoutList.removeFirstElement();
                     if (entry.activityFlag) {
-                        timeoutList.removeFirstElement();
                         entry.activityFlag = false;
                         entry.expiryTime = System.currentTimeMillis()+Constants.REQUEST_GRACE_PERIOD;
                         timeoutList.insertElement(entry);
@@ -387,15 +308,16 @@ public class RequestTable {
                             }
                         }                   
                     } else {    
-                        timeoutList.removeFirstElement();
+                        // Debug.print("cleanTable: remove request entry ");
                         removeOutstandingRequest(entry.key.longValue(),
-                                entry.originatorMACAddress.longValue());
+                                entry.originatorMACAddress.longValue(),
+                                entry.requestID);
                         
                     }
+                    entry = (RequestEntry) timeoutList.getFirstElement();
                 } else {
-                    elementsRemaining = false;
+                    break;
                 }       
-                entry = (RequestEntry) timeoutList.getFirstElement();
             }
         }
     }
@@ -406,55 +328,52 @@ public class RequestTable {
      * @param message
      * @return routeEventClient
      */
-    // FIXME See if I can improve synchronization
     public RouteEventClient getCallback(RREP message) {
-        Long wantedDestination = new Long(message.getDestAddress());
-        RouteEventClient returnedClient = null;
-        
-        synchronized (table) {
-            Object o = table.get(wantedDestination);
-            if (o != null) {
-                
-                if (o instanceof Vector) {
-                    Vector v = (Vector) o;
-                    
-                    Enumeration e = v.elements();
-                    boolean breakOut = false;
-                    while (e.hasMoreElements() && !breakOut) {
-                        RequestEntry entry = (RequestEntry) e.nextElement();
-                        if (entry.originatorMACAddress.longValue() ==
-                                message.getOrigAddress()) {
-                            breakOut = true;
-                            returnedClient = entry.client;
-                        }
-                    }
-                } else {
-                    RequestEntry entry = (RequestEntry) o;
-                    if (entry.originatorMACAddress.longValue() ==
-                            message.getOrigAddress()) {
-                        returnedClient = entry.client;
-                    }
-                }
-            }
-        }
-        
-        return returnedClient;
+        RequestEntry entry = findRequest(message.getDestAddress(), message.getOrigAddress(), 0, true);
+        return entry != null ? entry.client : null;
     }
     
     private void notifyCleaner() {
         synchronized (cleanerMonitor) {
-            cleanerMonitor.notify();
+            cleanerMonitor.notifyAll();
         }
     }
     
+    private boolean hasNoActiveRequest() {
+        Enumeration e = table.elements();
+        boolean result = true;
+        while (e.hasMoreElements()) {
+            Object o = e.nextElement();                
+            if (o instanceof Vector) {
+                Vector v = (Vector) o;
+                Enumeration ev = v.elements();
+                while (ev.hasMoreElements()) {
+                    if (((RequestEntry) ev.nextElement()).activityFlag) {
+                        result = false;
+                        break;
+                    }
+                }
+            } else {
+                if (((RequestEntry) o).activityFlag) {
+                    result = false;
+                    break;
+                }
+            }
+        }
+        return result;
+    }
+    
     void waitUntilTableNotEmpty() {
-        while (timeoutList.getFirstElement() == null) {
+        while (hasNoActiveRequest()) {
             synchronized (cleanerMonitor) {
                 try {
                     cleanerMonitor.wait();
                 } catch (InterruptedException e) {
                     // ignore & continue
                 }
+            }
+            if (Thread.currentThread().getPriority() == Thread.MIN_PRIORITY) {
+                break;
             }
         }
     }

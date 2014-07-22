@@ -61,15 +61,15 @@ public class Constants {
     private static final long AVERAGE_RANDOM_BACKOFF = 200; // 200 is actually about 75%
     public static final long NODE_TRAVERSAL_TIME = 30;
     public static final long NET_TRAVERSAL_TIME = 
-            2 * NODE_TRAVERSAL_TIME * NET_DIAMETER; //=900
+                    2 * NODE_TRAVERSAL_TIME * NET_DIAMETER; // = 900
     public static final long PATH_DISCOVERY_TIME =  // for RREQ timeout and cleaner sleep
-            (AVERAGE_RANDOM_BACKOFF * NET_DIAMETER * 2) + NET_TRAVERSAL_TIME; //= 7500 + 900
+                    (AVERAGE_RANDOM_BACKOFF * NET_DIAMETER * 2) + NET_TRAVERSAL_TIME; // = 6000 + 900
     public static final long ACTIVE_ROUTE_TIMEOUT = 30000; // for Route timeout
            
     public static final long DELETE_PERIOD = 2500; //  routing table cleaner
     public static final long REQUEST_GRACE_PERIOD =  1 * 60000; // in increments of 60 seconds
-    public static final long NEXT_HOP_WAIT = 2 * NODE_TRAVERSAL_TIME; //=20   not used
-    public static final long BLACKLIST_TIMEOUT = RREQ_RETRIES * NET_TRAVERSAL_TIME; //1200 not used
+    public static final long NEXT_HOP_WAIT = 2 * NODE_TRAVERSAL_TIME; // = 60   not used
+    public static final long BLACKLIST_TIMEOUT = RREQ_RETRIES * NET_TRAVERSAL_TIME; // = 2700 not used
     public static final long EXPIRY_TIME_DELTA = 5;  // used by table cleaners
     
     /*

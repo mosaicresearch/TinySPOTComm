@@ -390,13 +390,6 @@ class FlashManager implements IFlashManager {
 		for (int i = 0; i < fileInfos.length; i++) {
 			sb.append(" " + i + ": " + fileInfos[i].toString());
 		}
-		int[] freeSectorIndices = getFreeSectorIndices();
-		String string = " Free sectors (" + freeSectorIndices.length + ") :";
-		for (int i = 0; i < freeSectorIndices.length; i++) {
-			string += " 0x" + Integer.toHexString(freeSectorIndices[i]);
-		}
-		sb.append(string);
-		sb.append(lineSeparator);
 		return sb.toString();
 	}
 

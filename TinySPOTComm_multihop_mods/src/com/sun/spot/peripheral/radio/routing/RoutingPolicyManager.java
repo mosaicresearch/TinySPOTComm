@@ -27,13 +27,15 @@ package com.sun.spot.peripheral.radio.routing;
 import com.sun.spot.peripheral.Spot;
 import com.sun.spot.peripheral.radio.RadioFactory;
 import com.sun.spot.peripheral.radio.routing.interfaces.IRoutingPolicyManager;
+import com.sun.spot.service.BasicService;
+import com.sun.spot.service.ServiceRegistry;
 import com.sun.spot.util.Debug;
 
 /**
  * The onject that oversees the routing policy for this node
  * @author pete
  */
-public class RoutingPolicyManager implements IRoutingPolicyManager {
+public class RoutingPolicyManager extends BasicService implements IRoutingPolicyManager {
     private static RoutingPolicyManager rpm;
     
     private static final String ROUTING_POLICY_PROPERTY = "spot.mesh.routing.enable";
@@ -68,11 +70,20 @@ public class RoutingPolicyManager implements IRoutingPolicyManager {
      * @return the singleton that manages routing policy
      */
     public synchronized static IRoutingPolicyManager getInstance() {
-        if (rpm == null) 
-            rpm = new RoutingPolicyManager();
+        if (rpm == null) {
+            rpm = (RoutingPolicyManager) ServiceRegistry.getInstance().lookup(RoutingPolicyManager.class);
+            if (rpm == null) {
+                rpm = new RoutingPolicyManager();
+                ServiceRegistry.getInstance().add(rpm);
+            }
+        }
         return rpm;
     }
     
+    public String getServiceName() {
+        return "RoutingPolicyManager";
+    }
+
     /**
      * Notify the routing subsystem of a new routing policy
      * @param newPolicy policy that should now be in effect

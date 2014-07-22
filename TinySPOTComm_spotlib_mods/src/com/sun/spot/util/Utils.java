@@ -309,7 +309,22 @@ public class Utils {
 			return Integer.parseInt(property);
 		}
 	}
-	
+
+        /**
+         * Get the value of a system property.
+         * @param propertyName the name of the property
+         * @param valueIfNotDefined the value to return if not found
+         * @return the value
+         */
+        public static String getSystemProperty(String propertyName, String valueIfNotDefined) {
+            String property = System.getProperty(propertyName);
+            if(property==null) {
+                return valueIfNotDefined;
+            } else {
+                return property;
+            }
+        }
+
 	/**
 	 * Convert an Enumeration to a Vector
 	 * @param items the Enumeration to convert

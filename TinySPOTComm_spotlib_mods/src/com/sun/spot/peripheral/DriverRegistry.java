@@ -113,9 +113,7 @@ public class DriverRegistry implements IDriverRegistry {
 	 * @return true if all the drivers report they deactivated successfully, false if any driver couldn't deactivate, in which case the others have been reactivated
 	 */
 	synchronized boolean tearDown() {
-		int i = drivers.size();
-		while (i>0) {
-			--i;
+		for (int i = drivers.size() - 1; i >= 0; i--) {
 			IDriver driver = ((IDriver) drivers.elementAt(i));
 			if (tracing) {
 				Utils.log("Tearing down " + driver.getDriverName());
@@ -158,7 +156,7 @@ public class DriverRegistry implements IDriverRegistry {
 	}
 
 	synchronized void shutDown() {
-		for (int i = 0; i < drivers.size(); i++) {
+        for (int i = drivers.size() - 1; i >= 0; i--) {
 			IDriver driver = (IDriver) drivers.elementAt(i);
 			if (tracing) {
 				Utils.log("Shutting down " + driver.getDriverName());

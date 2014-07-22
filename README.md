@@ -1,7 +1,7 @@
 TinySPOTComm
 ============
 
-TinySPOTComm consists of a number of tweaks to the 'blue' release of the Sun SPOT SDK
+TinySPOTComm consists of a number of tweaks to the Sun SPOT SDK (both 'blue' and 'red' are supported) 
 to allow for basic interoperability with TinyOS Motes. This README file describes how to setup
 the TinySPOTComm library. For more information about the TinySPOTComm project we refer to the following 
 paper:
@@ -21,6 +21,10 @@ some libraries of the SunSPOT SDK will be altered
 
 2) Checkout the TinySPOTComm repository from GitHub
     https://github.com/mosaicresearch/TinySPOTComm.git
+
+3) Checkout the correct 'tag' for your SunSPOT Distribution
+    * The 'blue' tag is the last stable version for the SunSPOT blue sdk
+    * The 'red' tag is the last stable version for the SunSPOT red sdk
 
 3) Run 'ant prepare' from the directory where you downloaded TinySPOTComm. The ant script will now
    update your SunSPOT SDK files and create a new library.
@@ -45,5 +49,5 @@ Final notes
 ===========
 
 - Please note that TinySPOTComm does NOT provide muli-hop support for communication with TinyOS nodes.
-
-- This version of TinySPOTComm only supports the BLUE release of the SunSPOT SDK
+- Currently only the 'blue' and 'red' releases of the SunSPOT SDK are supported. The 'Yellow' release is NOT 
+supported.

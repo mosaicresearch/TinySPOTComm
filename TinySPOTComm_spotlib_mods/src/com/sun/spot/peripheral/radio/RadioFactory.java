@@ -74,7 +74,13 @@ public class RadioFactory {
         return theMACLayer;
     }
 
-    
+    /**
+     * Answer the interface for accessing the socket MAC.
+     * @return the socket MAC layer object
+     */
+    public synchronized static I802_15_4_MAC getSocketMAC() {
+        return null;
+    }
     
     /******
      * 

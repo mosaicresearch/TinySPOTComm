@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -30,6 +30,7 @@ import com.sun.spot.peripheral.NoRouteException;
 import com.sun.spot.peripheral.SpotFatalException;
 import com.sun.spot.util.Queue;
 import com.sun.squawk.util.IntHashtable;
+import java.util.Enumeration;
 
 
 /**
@@ -69,6 +70,11 @@ class ConnectionState {
 	 * helper field for PortBasedProtocolManager - not for public use.
 	 */
 	int lastOutgoingSeq = -1;
+
+	/**
+	 * helper field for PortBasedProtocolManager - not for public use.
+	 */
+	int nextACKSeq = -1;
 
     /**
      * Table of buffers that might need to be retransmitted if the connection is 
@@ -154,7 +160,7 @@ class ConnectionState {
 		}
 	}
 	
-	private void checkStatusAndReport() throws NoAckException, ChannelBusyException, NoMeshLayerAckException, NoRouteException {
+    void checkStatusAndReport() throws NoAckException, ChannelBusyException, NoMeshLayerAckException, NoRouteException {
 		if (status != INTACT) {
 			int oldStatus = status;
 			status = INTACT;
@@ -180,10 +186,23 @@ class ConnectionState {
         }
 	}
 
+	void removeAllRetransBuffers() {
+        synchronized (retransBuffers) {
+            Enumeration keys = retransBuffers.keys();
+            while (keys.hasMoreElements()) {
+                RetransmitBuffer rb = (RetransmitBuffer) retransBuffers.remove(((Integer)(keys.nextElement())).intValue());
+                if (rb != null && rb.retransmitTimer != null) {
+                    rb.retransmitTimer.cancel();
+                }
+            }
+        	retransBuffers.notifyAll();
+        }
+    }
+
 	void removeRetransBuffer(byte seqNum) {
         synchronized (retransBuffers) {
         	RetransmitBuffer rb = (RetransmitBuffer)retransBuffers.remove(seqNum);
-        	if (rb != null) {
+        	if (rb != null && rb.retransmitTimer != null) {
         		rb.retransmitTimer.cancel();
         	}
         	retransBuffers.notifyAll();

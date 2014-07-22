@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -77,10 +77,10 @@ public class LowPanHeaderInfo extends HeaderInfoBase{
      */   
     public String getProperty(String key) {
         if (key.toLowerCase().equals("sourceaddress")) {
-            return new IEEEAddress(sourceAddress).asDottedHex();
+            return IEEEAddress.toDottedHex(sourceAddress);
         }
         if (key.toLowerCase().equals("destinationaddress")) {
-            return new IEEEAddress(destinationAddress).asDottedHex();
+            return IEEEAddress.toDottedHex(destinationAddress);
         }
         if (key.toLowerCase().equals("rssi")) {
             return Integer.toString(rssi);
@@ -98,10 +98,10 @@ public class LowPanHeaderInfo extends HeaderInfoBase{
             return Integer.toString(sourcePanID);
         }
         if (key.toLowerCase().equals("originator")) {
-            return new IEEEAddress(originator).asDottedHex();
+            return IEEEAddress.toDottedHex(originator);
         }
         if (key.toLowerCase().equals("finaldestination")) {
-            return new IEEEAddress(finalDestination).asDottedHex();
+            return IEEEAddress.toDottedHex(finalDestination);
         }
         if (key.toLowerCase().equals("hopcount")&meshDelivery) {
             return Long.toString(hopCount);

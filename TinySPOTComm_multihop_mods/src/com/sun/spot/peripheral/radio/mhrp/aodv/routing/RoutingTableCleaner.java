@@ -66,7 +66,8 @@ public class RoutingTableCleaner extends Thread {
     }
     
   public void stopThread() {
-    keepRunning = false;
-    this.interrupt();
+      keepRunning = false;
+      this.setPriority(Thread.MIN_PRIORITY);
+      this.interrupt();
   }
 }

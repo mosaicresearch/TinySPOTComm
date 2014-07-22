@@ -45,7 +45,8 @@ import com.sun.squawk.util.StringTokenizer;
  */
 
 /**
- *
+ * Provides a way to start/pause/stop Isolates.
+ * 
  * @author vgupta
  */
 public class IsolateManager {

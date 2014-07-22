@@ -100,32 +100,90 @@ public interface ILowPan {
      * forward a data packet
      *
      * @param listener object that is notified when data is forwarded
+     * @deprecated use addDataEventListener()
      */
     public void registerDataEventListener(IDataEventListener listener);
-    
-    /**
-     * Registers an application etc. that is notified when this node
-     * initiates/receives supported route events
-     *
-     * @param listener object that is notified when route events occur
-     */
-    public void registerRouteEventListener(IRouteEventListener listener);
-    
-    /**
-     * Registers an application etc. that is notified when this node
-     * initiates/receives supported route events
-     *
-     * @param listener object that is notified when route events occur
-     */
-    public void registerMHEventListener(IMHEventListener listener);
     
     /**
      * Deregisters an application etc. that is called back when data is forwarded
      *
      * @param listener object that is notified when data is forwarded
+     * @deprecated use removeDataEventListener()
      */
     public void deregisterDataEventListener(IDataEventListener listener);
+
+    /**
+     * Adds a new listener that is notified when this node is used to
+     * forward a data packet
+     *
+     * @param listener object that is notified when data is forwarded
+     */
+    public void addDataEventListener(IDataEventListener listener);
+
+    /**
+     * Removes the specified listener that is called back when data is forwarded
+     *
+     * @param listener object that is notified when data is forwarded
+     */
+    public void removeDataEventListener(IDataEventListener listener);
+
+    /**
+     * Registers an application etc. that is notified when this node
+     * initiates/receives supported route events
+     *
+     * @param listener object that is notified when route events occur
+     * @deprecated use addRouteEventListener()
+     */
+    public void registerRouteEventListener(IRouteEventListener listener);
     
+    /**
+     * Undo a previous call of registerRouteEventListener()
+     * @param listener the class that wants to be deregistered
+     * @deprecated use removeRouteEventListener()
+     */
+    public void deregisterRouteEventListener(IRouteEventListener listener);
+
+    /**
+     * Adds a new listener that is notified when this node
+     * initiates/receives supported route events
+     *
+     * @param listener object that is notified when route events occur
+     */
+    public void addRouteEventListener(IRouteEventListener listener);
+
+    /**
+     * Removes the specified listener that is notified when this node
+     * initiates/receives supported route events
+     *
+     * @param listener object that is notified when route events occur
+     */
+    public void removeRouteEventListener(IRouteEventListener listener);
+
+    /**
+     * Registers an application etc. that is notified when this node
+     * initiates/receives supported route events
+     *
+     * @param listener object that is notified when route events occur
+     * @deprecated use addMHEventListener()
+     */
+    public void registerMHEventListener(IMHEventListener listener);
+
+    /**
+     * Adds a new listener that is notified when this node
+     * initiates/receives supported route events
+     *
+     * @param listener object that is notified when route events occur
+     */
+    public void addMHEventListener(IMHEventListener listener);
+
+    /**
+     * Removes the specified listener that is notified when this node
+     * initiates/receives supported route events
+     *
+     * @param listener object that is notified when route events occur
+     */
+    public void removeMHEventListener(IMHEventListener listener);
+
     /**
      * Send a byte buffer on a given protocol. The caller simply supplied a byte
      * payload

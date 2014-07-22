@@ -33,7 +33,7 @@ public class RadioPolicyManager implements IRadioPolicyManager, IDriver {
 
 	private short panId;
 	private int channelNumber;
-        private int outputPower;
+    private int outputPower;
 	private I802_15_4_MAC macDevice;
 	private boolean macStarted = false;
 
@@ -46,8 +46,13 @@ public class RadioPolicyManager implements IRadioPolicyManager, IDriver {
 	public RadioPolicyManager(I802_15_4_MAC macDevice, int initialChannel, short initialPanId, int initialOutputPower) {
 		this.macDevice = macDevice;
 		this.panId = initialPanId;
-		this.channelNumber = initialChannel;
-		this.outputPower = initialOutputPower;
+        if (RadioFactory.isRunningOnHost()) {
+            this.channelNumber = initialChannel;
+            this.outputPower = initialOutputPower;
+        } else {
+            setChannelNumber(initialChannel);
+            setOutputPower(initialOutputPower);
+        }
 	}
 
 	public synchronized void policyHasChanged(IConnectionID conn, RadioPolicy selection) {
@@ -118,7 +123,7 @@ public class RadioPolicyManager implements IRadioPolicyManager, IDriver {
 	}
 
 	public int getOutputPower() {
-		return getPLMETransmitPower() << 26 >> 26;
+		return outputPower;
 	}
 
 	public short getPanId() {
@@ -129,7 +134,9 @@ public class RadioPolicyManager implements IRadioPolicyManager, IDriver {
 		if (channel == channelNumber) return;
 		if (macStarted) {
 			macDevice.mlmeStart(panId, channel);
-		}
+		} else {
+            getProprietaryMacDevice().setPLMEChannel(channel);
+        }
 		channelNumber = channel;
 	}
 
@@ -137,8 +144,7 @@ public class RadioPolicyManager implements IRadioPolicyManager, IDriver {
 		if (power < -32 || power > 31) {
 			throw new IllegalArgumentException("output power should be between -32dB and +31dB");
 		}
-		setPLMETransmitPower(power & 0x3F);
-                outputPower = getOutputPower();
+		outputPower = setPLMETransmitPower(power & 0x3F);
 	}
 
 	public void setPanId(short pid) {
@@ -172,7 +178,7 @@ public class RadioPolicyManager implements IRadioPolicyManager, IDriver {
 	private synchronized void startMAC() {
 		if (!macStarted) {
 			macDevice.mlmeStart(panId, channelNumber);
-            setPLMETransmitPower(outputPower);          // must set power after channel
+            outputPower = setPLMETransmitPower(outputPower);          // must set power after channel
 			macStarted = true;
 		}
 	}
@@ -185,8 +191,9 @@ public class RadioPolicyManager implements IRadioPolicyManager, IDriver {
 		return (IProprietaryMAC) macDevice;
 	}
 
-	private void setPLMETransmitPower(int power) {
+	private int setPLMETransmitPower(int power) {
 		getProprietaryMacDevice().setPLMETransmitPower(power);
+		return getPLMETransmitPower() << 26 >> 26;
 	}
 	
 	private void updateRadioState() {

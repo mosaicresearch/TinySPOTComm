@@ -27,30 +27,34 @@ package com.sun.spot.peripheral;
 public interface IPowerController {
 
 	// PowerController command bytes:
-	public static final byte GET_STATUS_CMD = 0;
+	public static final byte GET_AND_CLEAR_STATUS_CMD = 0;
 	public static final byte QUERY_V_CORE = 1;
 	public static final byte QUERY_V_CC = 2;
-	public static final byte QUERY_V_BATT = 3;
-	public static final byte QUERY_TEMPERATURE = 4;
+	public static final byte QUERY_V_BATT = 3;      // possibly not in rev 7/pctrl2.00 ??
+	public static final byte QUERY_TEMPERATURE = 4; // possibly not in rev 7/pctrl2.00 ??
 	public static final byte QUERY_V_EXT = 5;
 	public static final byte QUERY_V_USB = 6;
-	public static final byte QUERY_I_CHARGE = 7;
-	public static final byte QUERY_I_DISCHARGE = 8;
+	public static final byte QUERY_I_CHARGE = 7;    // possibly not in rev 7/pctrl2.00 ??
+	public static final byte QUERY_I_DISCHARGE = 8; // possibly not in rev 7/pctrl2.00 ??
 	// GET_TIME_CMD = 9 not used
-	public static final byte GET_ALARM_CMD = 0xA;
-	public static final byte GET_STRING_LEN_CMD = 0xB;
-	public static final byte GET_STRING_CMD = 0xC;
-	public static final byte SET_TIME_CMD = 0xD;
-	public static final byte SET_ALARM_CMD = 0xE;
-	public static final byte QUERY_I_MAX = 0x10;
-	public static final byte SET_INDICATE_CMD = 0x11;
-	public static final byte QUERY_STARTUP = 0x12;
-	public static final byte GET_POWER_STATUS_CMD = 0x13;
+	public static final byte GET_ALARM_CMD = 10;
+	public static final byte GET_STRING_LEN_CMD = 11;
+	public static final byte GET_STRING_CMD = 12;
+	public static final byte SET_TIME_CMD = 13;
+	public static final byte SET_ALARM_CMD = 14;
+	// SET_SLEEP_CMD = 15 not used
+	public static final byte QUERY_I_MAX = 16;      // possibly not in rev 7/pctrl2.00 ??
+	public static final byte SET_INDICATE_CMD = 17;
+	public static final byte QUERY_STARTUP = 18;
+	public static final byte GET_POWER_STATUS_CMD = 19;
 	// RUN_BOOTLOADER = 20 not used
 	// QUERY_PROGMEM = 21 not used
 	// QUERY_NEXTPROGMEM = 22 not used
 	// FORCE_ADC = 23 not used
-	public static final byte SET_CONTROL_CMD = 0x18;
+	public static final byte SET_CONTROL_CMD = 24;
+	// GET_STATUS_CMD = 25 not used
+	public static final byte GET_USB_HP_CMD = 26;
+	public static final byte SET_USB_HP_CMD = 27;
 
 	// getStatus() flags:
 	public static final byte COLD_BOOT_EVENT = 1<<0;
@@ -238,5 +242,16 @@ public interface IPowerController {
 	 * @return Answer an {@link IBattery} for access to information about the battery if any.
 	 */
 	IBattery getBattery();
+	
+	/**
+	 * Set the state of the USB high power pin
+	 * @param high true to set the usb into high power mode, false in lower power mode.
+	 */
+	void setUSBHP(boolean high);
+	
+	/**
+	 * @return Whether the USB is in high power (true) or low power (false) mode.
+	 */
+	boolean getUSBHP();
 
 }

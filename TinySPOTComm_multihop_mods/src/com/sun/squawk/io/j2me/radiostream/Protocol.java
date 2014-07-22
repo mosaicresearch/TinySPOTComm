@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -104,7 +104,7 @@ public class Protocol extends RadioConnectionBase implements RadiostreamConnecti
 			split = name.length()-1;
 		}
 
-		macAddress = new IEEEAddress(name.substring(0, split)).asLong();
+		macAddress = IEEEAddress.toLong(name.substring(0, split));
 		portNo = (byte)portNoAsInt;
 		if (timeouts) {
 			setTimeout(DEFAULT_TIMEOUT);

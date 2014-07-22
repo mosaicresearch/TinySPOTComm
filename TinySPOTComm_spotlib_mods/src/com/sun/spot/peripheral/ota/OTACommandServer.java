@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -24,6 +24,7 @@
 
 package com.sun.spot.peripheral.ota;
 
+import com.sun.spot.service.ISpotRadioHelper;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -39,7 +40,6 @@ import javax.microedition.io.StreamConnection;
 
 import com.sun.spot.flashmanagement.FlashFile;
 import com.sun.spot.io.j2me.remoteprinting.IRemotePrintManager;
-import com.sun.spot.peripheral.ChannelBusyException;
 import com.sun.spot.peripheral.ConfigPage;
 import com.sun.spot.peripheral.IPowerController;
 import com.sun.spot.peripheral.IBattery;
@@ -49,18 +49,18 @@ import com.sun.spot.peripheral.ITimeoutableConnection;
 import com.sun.spot.peripheral.IUSBPowerDaemon;
 import com.sun.spot.peripheral.Spot;
 import com.sun.spot.peripheral.radio.RadioPolicy;
-import com.sun.spot.service.IService;
+import com.sun.spot.service.ServiceRegistry;
 import com.sun.spot.util.CrcOutputStream;
 import com.sun.spot.util.IEEEAddress;
 import com.sun.spot.util.Utils;
 
 /**
- * This class monitors radiogram communications on port number
- * 8, and responds to commands received. These commands allow flashing the
+ * This class monitors radiogram communications on port number 8 and establishes
+ * a new OTA session to handle commands. These commands allow flashing the
  * Spot's config page and/or applications remotely, retrieving the config page
  * contents, and restarting the Spot.<br>
  * <br>
- * Applications should never need to create an OTACommandServer explicitly.
+ * Applications should not need to create an OTACommandServer explicitly.
  * OTA is enabled or disabled for a SPOT using the ant command line facility.
  * <br>
  * To get access to the OTACommandServer use Spot.getInstance().getOTACommandServer()
@@ -75,7 +75,15 @@ public class OTACommandServer implements Runnable, ISpotAdminConstants, IOTAComm
     private static final int MAX_HELLO_DELAY = 100;
     private static final int MAX_HELLO_RETRIES = 3;
     private static final int CRC_STREAM_BLOCK_SIZE = 2048;
+
     private static OTACommandServer theInstance = null;
+    private static String datagramProtocol = DEFAULT_DATAGRAM_PROTOCOL;
+    private static String streamProtocol = DEFAULT_STREAM_PROTOCOL;
+    private static int datagramPort = DEFAULT_DATAGRAM_PORT;
+    private static int streamPort = DEFAULT_STREAM_PORT;
+
+    private ISpotRadioHelper radioHelper = null;
+
     private DatagramConnection radiogramConnection;
     private Datagram receivedCommandRadiogram;
     private Datagram sendRadiogram;
@@ -91,6 +99,7 @@ public class OTACommandServer implements Runnable, ISpotAdminConstants, IOTAComm
     private Random random;
     private int status = STOPPED;
     private Thread thread = null;
+    private byte subtype = ESPOT_SUBTYPE;
 
     /**
      * Startup the OTACommandServer on a SPOT listening for OTA connections.
@@ -98,9 +107,8 @@ public class OTACommandServer implements Runnable, ISpotAdminConstants, IOTAComm
      * @param args ignored
      */
     public static void main(String[] args) {
-        IOTACommandServer ota = getInstance();
         if (Utils.isOptionSelected("spot.ota.enable", false)) {
-            ota.start();
+            getInstance().start();
         }
     }
 
@@ -110,13 +118,41 @@ public class OTACommandServer implements Runnable, ISpotAdminConstants, IOTAComm
      */
     public synchronized static IOTACommandServer getInstance() {
         if (theInstance == null) {
-            theInstance = new OTACommandServer();
-            theInstance.initialize();
+            theInstance = (OTACommandServer)ServiceRegistry.getInstance().lookup(OTACommandServer.class);
+            if (theInstance == null) {
+                Utils.log("Creating new OTACommandServer");
+                theInstance = new OTACommandServer();
+                ServiceRegistry.getInstance().add(theInstance);
+            }
         }
         return theInstance;
     }
 
     private OTACommandServer() {
+        spot = Spot.getInstance();
+        remotePrintManager = spot.getRemotePrintManager();
+        powerController = spot.getPowerController();
+        radioHelper = (ISpotRadioHelper)ServiceRegistry.getInstance().lookup(ISpotRadioHelper.class);
+        if (radioHelper != null) {
+            datagramProtocol = radioHelper.getDatagramConnectionProtocol();
+            streamProtocol = radioHelper.getStreamConnectionProtocol();
+        }
+        try {
+            // Note that the getBattery() method can throw
+            // a runtime exception if the SPOT has an old
+            // power controller or hardware
+            battery = powerController.getBattery();
+        } catch (Exception e) {
+            // ignore
+        }
+        usbPowerDaemon = spot.getUsbPowerDaemon();
+        try {
+            libraryHash = Integer.parseInt(new FlashFile(ConfigPage.LIBRARY_URI).getComment(), 16);
+        } catch (IOException ex) {
+            System.err.println("[OTACommandServer] Got IOException while trying to get library hash " + ex.getMessage());
+            ex.printStackTrace();
+            libraryHash = -1;
+        }
     }
 
     /**
@@ -179,7 +215,25 @@ public class OTACommandServer implements Runnable, ISpotAdminConstants, IOTAComm
     }
 
     /**
-     * Should not be invoked from user code - call {@link #initialize()} instead.
+     * Set the device subtype for the Hello command.
+     *
+     * @param subtype specify the type of SPOT this is
+     */
+    public void setSubType(byte subtype) {
+        this.subtype = subtype;
+    }
+
+    /**
+     * Get the device subtype for the Hello command.
+     *
+     * @return the type of SPOT this is
+     */
+    public byte getSubType() {
+        return subtype;
+    }
+
+    /**
+     * Should not be invoked from user code - call {@link #start()} instead.
      * 
      * @see java.lang.Runnable#run()
      */
@@ -222,10 +276,14 @@ public class OTACommandServer implements Runnable, ISpotAdminConstants, IOTAComm
             IEEEAddress remoteAddress = new IEEEAddress(receivedCommandRadiogram.getAddress());
             if (session != null && session.isAlive()) {
                 if (!remoteAddress.equals(session.getBasestationAddress())) {
+                    Utils.log("[OTACommandServer] Already has a session with " + remoteAddress);
                     sendErrorDetails("[OTACommandServer] Already has a session with " + remoteAddress);
                 } else {
-                    session.closedown();
-                    startSession(remoteAddress);
+                    long now = (radioHelper != null) ? radioHelper.getTimestamp(receivedCommandRadiogram) : System.currentTimeMillis();
+                    if ((now - session.getStartTime()) > 1000) { // ignore multiple requests in last second
+                        session.closedown();
+                        startSession(remoteAddress);
+                    }
                 }
             } else {
                 startSession(remoteAddress);
@@ -235,129 +293,165 @@ public class OTACommandServer implements Runnable, ISpotAdminConstants, IOTAComm
         }
     }
 
-    /**
-     * Start up a OTACommandServer. Sets up its radio connections and then
-     * spawns a thread to respond to remote requests.
-     */
-    private void initialize() {
-        spot = Spot.getInstance();
-        remotePrintManager = spot.getRemotePrintManager();
-        powerController = spot.getPowerController();
-        try {
-            // Note that the getBattery() method can throw
-            // a runtime exception if the SPOT has an old
-            // power controller or hardware
-            battery = powerController.getBattery();
-        } catch (Exception e) {
-            
-        }
-        usbPowerDaemon = spot.getUsbPowerDaemon();
-        try {
-            libraryHash = Integer.parseInt(new FlashFile(ConfigPage.LIBRARY_URI).getComment(), 16);
-        } catch (IOException ex) {
-            System.err.println("[OTACommandServer] Got IOException while trying to get library hash " + ex.getMessage());
-            ex.printStackTrace();
-            libraryHash = -1;
-        }
-    }
-
     private void sendHelloResponse() throws IOException {
-        Utils.log("[OTACommandServer] Processing hello request from " + receivedCommandRadiogram.getAddress());
-        sendRadiogram.reset();
-        sendRadiogram.setAddress(receivedCommandRadiogram);
-        sendRadiogram.writeByte(HELLO_COMMAND_VERSION);
-        sendRadiogram.writeByte(HELLO_COMMAND_MINOR_VERSION);
-        sendRadiogram.writeUTF(System.getProperty("spot.sdk.version"));
-        sendRadiogram.writeInt(libraryHash);
-        byte[] publicKey = spot.getPublicKey();
-        for (int i = 1; i <= 3; i++) {
-            sendRadiogram.writeByte(i >= publicKey.length ? 0 : publicKey[i]);
+        DatagramConnection replyConn = radiogramConnection;
+        Datagram replyRadiogram = sendRadiogram;
+
+        // Radiogram rg = (Radiogram)receivedCommandRadiogram;
+        byte helloType = BASIC_HELLO_TYPE;
+        boolean oldHelloType = true;
+        if (receivedCommandRadiogram.getLength() > (HELLO_CMD.length() + 2)) {
+            helloType = receivedCommandRadiogram.readByte();
+            oldHelloType = false;
         }
-        sendRadiogram.writeLong(System.currentTimeMillis());
-        sendRadiogram.writeByte(HARDWARE_MAJOR_REV_ESPOT);
-        sendRadiogram.writeByte(spot.getHardwareType());
-        boolean externallyPowered = usbPowerDaemon.isUsbPowered();
-        sendRadiogram.writeShort((externallyPowered ? 1 << 15 : 0) | powerController.getVbatt());
-        String name = System.getProperty("name");
-        if (name == null) {
-            name = "";
-        } else if (name.length() > 20) {
-            name = name.substring(0, 20);
-        }
-        sendRadiogram.writeUTF(name);
-        sendRadiogram.writeBoolean(publicKey.length != 0);
-        
-        byte battStatus = 127; // choose an invalid value
-        if (battery != null) {
-            battStatus = (byte) (battery.getBatteryLevel() |
-                ((battery.getState() == IBattery.CHARGING) ? 128 : 0));
-        }
-        sendRadiogram.writeByte(battStatus);
-        String[] coordinates = new String[3];
-        coordinates[0] = System.getProperty("spot.latitude");
-        coordinates[1] = System.getProperty("spot.longitude");
-        coordinates[2] = System.getProperty("spot.altitude");
-        if ((coordinates[0] != null) ||
-                (coordinates[1] != null) ||
-                (coordinates[2] != null)) {
-            // 1 indicates uncompressed latitude, longitude and 
-            // altitude expressed as floats.
-            sendRadiogram.writeByte(1);
-            float tmp = (float) 0.0;
-            for (int i = 0; i < coordinates.length; i++) {
-                try {
-                    tmp = (float) 0.0;
-                    tmp = Float.parseFloat(coordinates[i]);
-                } catch (Exception e) {
-                    System.err.println("Trouble parsing " +
-                            "geoCoordinate " + coordinates[i]);
-                }
-                sendRadiogram.writeFloat(tmp);
+
+        if (helloType == BASIC_HELLO_TYPE) {
+            Utils.log("[OTACommandServer] Processing hello request from " + receivedCommandRadiogram.getAddress());
+            replyRadiogram.reset();
+            replyRadiogram.setAddress(receivedCommandRadiogram);
+            replyRadiogram.writeByte(HELLO_COMMAND_MAJOR_VERSION);
+            replyRadiogram.writeByte(HELLO_COMMAND_MINOR_VERSION);
+
+            if (!oldHelloType) {   // try to stay compatible with previous versions
+                replyRadiogram.writeByte(BASIC_HELLO_TYPE);
+
+                replyRadiogram.writeByte(SPOT_TYPE);
+                replyRadiogram.writeByte(subtype);
             }
-        } else {
-            coordinates[0] = System.getProperty("spot.x");
-            coordinates[1] = System.getProperty("spot.y");
-            coordinates[2] = System.getProperty("spot.z");
+
+            replyRadiogram.writeUTF(Utils.getSystemProperty("spot.sdk.version", "unknown sdk"));
+            replyRadiogram.writeInt(libraryHash);
+            byte[] publicKey = spot.getPublicKey();
+            for (int i = 1; i <= 3; i++) {
+                replyRadiogram.writeByte(i >= publicKey.length ? 0 : publicKey[i]);
+            }
+            if (radioHelper != null) {
+                replyRadiogram.writeLong(radioHelper.getTimestamp(receivedCommandRadiogram));
+            } else {
+                replyRadiogram.writeLong(System.currentTimeMillis());
+            }
+            replyRadiogram.writeByte(HARDWARE_MAJOR_REV_ESPOT);
+            replyRadiogram.writeByte(spot.getHardwareType());
+            boolean externallyPowered = usbPowerDaemon.isUsbPowered();
+            replyRadiogram.writeShort((externallyPowered ? 1 << 15 : 0) | powerController.getVbatt());
+            String name = System.getProperty("name");
+            if (name == null) {
+                name = "";
+            } else if (name.length() > 20) {
+                name = name.substring(0, 20);
+            }
+            replyRadiogram.writeUTF(name);
+            replyRadiogram.writeBoolean(publicKey.length != 0);
+
+            byte battStatus = 127; // choose an invalid value
+            if (battery != null) {
+                battStatus = (byte) (battery.getBatteryLevel() |
+                        ((battery.getState() == IBattery.CHARGING) ? 128 : 0));
+            }
+            replyRadiogram.writeByte(battStatus);
+            String[] coordinates = new String[3];
+            coordinates[0] = System.getProperty("spot.latitude");
+            coordinates[1] = System.getProperty("spot.longitude");
+            coordinates[2] = System.getProperty("spot.altitude");
             if ((coordinates[0] != null) ||
                     (coordinates[1] != null) ||
                     (coordinates[2] != null)) {
-                // 2 indicates cartesian coordinates expressed as ints
-                sendRadiogram.writeByte(2);
-                float tmp = -1;
+                // 1 indicates uncompressed latitude, longitude and
+                // altitude expressed as floats.
+                replyRadiogram.writeByte(1);
+                float tmp = (float) 0.0;
                 for (int i = 0; i < coordinates.length; i++) {
                     try {
-                        tmp = Float.MIN_VALUE;
+                        tmp = (float) 0.0;
                         tmp = Float.parseFloat(coordinates[i]);
                     } catch (Exception e) {
                         System.err.println("Trouble parsing " +
-                                "cartesian coordinate " + coordinates[i]);
+                                "geoCoordinate " + coordinates[i]);
                     }
-                    sendRadiogram.writeFloat(tmp);
-                } 
+                    replyRadiogram.writeFloat(tmp);
+                }
             } else {
-                // this byte says how location is encoded, 0 => no location
-                sendRadiogram.writeByte(0);
+                coordinates[0] = System.getProperty("spot.x");
+                coordinates[1] = System.getProperty("spot.y");
+                coordinates[2] = System.getProperty("spot.z");
+                if ((coordinates[0] != null) ||
+                        (coordinates[1] != null) ||
+                        (coordinates[2] != null)) {
+                    // 2 indicates cartesian coordinates expressed as ints
+                    replyRadiogram.writeByte(2);
+                    float tmp = -1;
+                    for (int i = 0; i < coordinates.length; i++) {
+                        try {
+                            tmp = Float.MIN_VALUE;
+                            tmp = Float.parseFloat(coordinates[i]);
+                        } catch (Exception e) {
+                            System.err.println("Trouble parsing " +
+                                    "cartesian coordinate " + coordinates[i]);
+                        }
+                        replyRadiogram.writeFloat(tmp);
+                    }
+                } else {
+                    // this byte says how location is encoded, 0 => no location
+                    replyRadiogram.writeByte(0);
+                }
             }
+        } else if (helloType == PHYSICAL_NEIGHBORS_HELLO_TYPE) {        // Physical Neighbors type
+            Utils.log("[OTACommandServer] Processing GetPhysicalNeighbors request from " + receivedCommandRadiogram.getAddress());
+            int counter = receivedCommandRadiogram.readInt();
+            int port = receivedCommandRadiogram.readByte();
+            if (port != 0) {
+                replyConn = (DatagramConnection)Connector.open(datagramProtocol + "://" + receivedCommandRadiogram.getAddress() + ":" + port);
+                replyRadiogram = replyConn.newDatagram(32);
+            } else {
+                replyRadiogram.reset();
+                replyRadiogram.setAddress(receivedCommandRadiogram);
+            }
+            replyRadiogram.writeByte(HELLO_COMMAND_MAJOR_VERSION);
+            replyRadiogram.writeByte(HELLO_COMMAND_MINOR_VERSION);
+            replyRadiogram.writeByte(PHYSICAL_NEIGHBORS_HELLO_TYPE);
+
+            replyRadiogram.writeInt(counter);
+            if (radioHelper != null) {
+                replyRadiogram.writeByte(radioHelper.getLinkQuality(receivedCommandRadiogram));
+                replyRadiogram.writeByte(radioHelper.getLinkStrength(receivedCommandRadiogram));
+                replyRadiogram.writeLong(radioHelper.getTimestamp(receivedCommandRadiogram));
+            } else {
+                replyRadiogram.writeByte(-1);   // unknown link quality
+                replyRadiogram.writeByte(-1);   // unknown link strength
+                replyRadiogram.writeLong(System.currentTimeMillis());
+            }
+        } else {        // Unknown type
+            Utils.log("[OTACommandServer] Unknown hello type: " + helloType);
+            return;
         }
 
-        for (int i = 0; i < MAX_HELLO_RETRIES; i++) {
-            Utils.sleep(Math.abs(random.nextInt(MAX_HELLO_DELAY)));
+        boolean broadcastPacket = radioHelper == null || radioHelper.isBroadcast(receivedCommandRadiogram);
+        int delay = broadcastPacket ? 10 * Math.abs(random.nextInt(MAX_HELLO_DELAY / 10)) : 0;
+        for (int i = 1; i <= MAX_HELLO_RETRIES; i++) {
+            Utils.sleep(delay);
             try {
-                radiogramConnection.send(sendRadiogram);
+                replyConn.send(replyRadiogram);
                 break;
-            } catch (ChannelBusyException e) {
+            } catch (IOException e) {
+                // if error retry
             }
+            delay = i * 10 * Math.abs(random.nextInt(MAX_HELLO_DELAY / 10));
+        }
+        if (replyConn != null && replyConn != radiogramConnection) {
+            replyConn.close();
         }
     }
 
     private void startSession(IEEEAddress remoteAddress) throws IOException {
         session = new OTACommandProcessor(remoteAddress, powerController, spot, remotePrintManager);
-        StreamConnection conn = (StreamConnection) Connector.open("radiostream://" + remoteAddress + ":" + PORT);
+        StreamConnection conn = (StreamConnection) Connector.open(streamProtocol + "://" + remoteAddress + ":" + streamPort);
         ((ITimeoutableConnection) conn).setTimeout(20000);
         ((IRadioControl) conn).setRadioPolicy(RadioPolicy.AUTOMATIC);
-        CrcOutputStream crcOutputStream = new CrcOutputStream(conn.openOutputStream(), conn.openInputStream(), CRC_STREAM_BLOCK_SIZE);
-        DataOutputStream dataOutputStream = new DataOutputStream(crcOutputStream);
-        DataInputStream dataInputStream = new DataInputStream(crcOutputStream.getInputStream());
+//        CrcOutputStream crcOutputStream = new CrcOutputStream(conn.openOutputStream(), conn.openInputStream(), CRC_STREAM_BLOCK_SIZE);
+//        DataOutputStream dataOutputStream = new DataOutputStream(crcOutputStream);
+//        DataInputStream dataInputStream = new DataInputStream(crcOutputStream.getInputStream());
+        DataOutputStream dataOutputStream = conn.openDataOutputStream();
+        DataInputStream dataInputStream = conn.openDataInputStream();
         initializeSession(conn, dataInputStream, dataOutputStream);
     }
 
@@ -375,9 +469,15 @@ public class OTACommandServer implements Runnable, ISpotAdminConstants, IOTAComm
     }
 
     private void sendUTF(String stringToSend) throws IOException {
-        DataOutputStream dataOutputStream = Connector.openDataOutputStream("radiostream://" + receivedCommandRadiogram.getAddress() + ":" + PORT);
-        dataOutputStream.writeUTF(stringToSend);
-        dataOutputStream.close();
+        DataOutputStream dataOutputStream = null;
+        try {
+            dataOutputStream = Connector.openDataOutputStream(streamProtocol + "://" + receivedCommandRadiogram.getAddress() + ":" + streamPort);
+            dataOutputStream.writeUTF(stringToSend);
+        } finally {
+            if (dataOutputStream != null) {
+                dataOutputStream.close();
+            }
+        }
     }
 
     private String getCommand() throws IOException {
@@ -402,6 +502,8 @@ public class OTACommandServer implements Runnable, ISpotAdminConstants, IOTAComm
     
     /**
      * Start the service, and return whether successful.
+     * Sets up its radio connections and then spawns a thread to respond to
+     * remote requests.
      *
      * @return true if the service was successfully started
      */
@@ -409,7 +511,7 @@ public class OTACommandServer implements Runnable, ISpotAdminConstants, IOTAComm
         if (!isRunning()) {
             Utils.log("[OTACommandServer] Starting");
             try {
-                radiogramConnection = (DatagramConnection) Connector.open("radiogram://:" + PORT);
+                radiogramConnection = (DatagramConnection) Connector.open(datagramProtocol + "://:" + datagramPort);
                 ((IRadioControl) radiogramConnection).setRadioPolicy(RadioPolicy.AUTOMATIC);
                 receivedCommandRadiogram = radiogramConnection.newDatagram(radiogramConnection.getMaximumLength());
                 sendRadiogram = radiogramConnection.newDatagram(radiogramConnection.getMaximumLength());
@@ -421,6 +523,7 @@ public class OTACommandServer implements Runnable, ISpotAdminConstants, IOTAComm
                 ex.printStackTrace();
                 return false;
             }
+            session = null;
             thread = new Thread(this, "OTACommandServer");
             thread.setPriority(Thread.MAX_PRIORITY - 1);
             thread.start();
@@ -445,6 +548,7 @@ public class OTACommandServer implements Runnable, ISpotAdminConstants, IOTAComm
                 status = STOPPING;
                 if (session != null && session.isAlive()) {
                     session.closedown();
+                    session = null;
                 }
                 radiogramConnection.close();
                 thread.interrupt();

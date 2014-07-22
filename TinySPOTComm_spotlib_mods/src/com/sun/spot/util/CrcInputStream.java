@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2007-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -31,7 +31,7 @@ import java.io.InputStream;
 class CrcInputStream extends InputStream {
 
 	/**
-	 * 
+	 * Internal class used by CrcOutputStream
 	 */
 	private static final int PROBE_RESPONSE = 0xC0000000;
 	private static final long PROBE_TIMEOUT_PERIOD = 200;
@@ -119,7 +119,12 @@ class CrcInputStream extends InputStream {
 			}
 			outstandingAck = length;
 		} else if (length > (1024 * 1024)) {
-			throw new IOException("Attempt to read unlikely checked byte array size: " + length);
+            int len = inData.available();
+            byte[] rawBytesBuffer = new byte[len+4];
+            Utils.writeBigEndInt(rawBytesBuffer, 0, length);
+            inData.readFully(rawBytesBuffer, 4, len);
+            String stuff = new String(rawBytesBuffer);
+            throw new IOException("Attempt to read unlikely checked byte array size: " + length + ". Raw data follows:\n" + stuff);
 		} else {
 			if (pendingBuffer != null) {
 				throw new IOException("Received new incoming data before last data was acknowledged");

@@ -36,21 +36,24 @@ public abstract class MACCommand implements ICommand {
 	private static final int FAILURE = 0;
 
 	public static final byte GetNullPacketAfterAckWaitCommand = 0;
-	public static final byte GetChannelAccessFailureCommand = 1;
-	public static final byte GetNoAckCommand = 2;
-	public static final byte GetRadioPropertyCommand = 3;
-	public static final byte GetWrongAckCommand = 4;
-	public static final byte MCPSDataIndicationCommand = 5;
-	public static final byte MCPSDataRequestCommand = 6;
-	public static final byte MLMEGetCommand = 7;
-	public static final byte MLMEResetCommand = 8;
-	public static final byte MLMERxEnableCommand = 9;
-	public static final byte MLMESetCommand = 10;
-	public static final byte MLMEStartCommand = 11;
-	public static final byte SetPLMETransmitPowerCommand = 12;
+	public static final byte GetChannelAccessFailureCommand   = 1;
+    public static final byte GetNoAckCommand                  = 2;
+	public static final byte GetRadioPropertyCommand          = 3;
+	public static final byte GetWrongAckCommand               = 4;
+	public static final byte GetRxErrorCommand                = 5;
+	public static final byte ResetErrorCountersCommand        = 6;
+	public static final byte MCPSDataIndicationCommand        = 7;
+	public static final byte MCPSDataRequestCommand           = 8;
+	public static final byte MLMEGetCommand                   = 9;
+	public static final byte MLMEResetCommand                 = 10;
+	public static final byte MLMERxEnableCommand              = 11;
+	public static final byte MLMESetCommand                   = 12;
+	public static final byte MLMEStartCommand                 = 13;
+	public static final byte SetPLMETransmitPowerCommand      = 14;
+	public static final byte SetPLMEChannelCommand            = 15;
 	
-	public static final byte ResetProxyCommand = 101;
-	public static final byte ExitCommand = 102;
+	public static final byte ResetProxyCommand                = 101;
+	public static final byte ExitCommand                      = 102;
 	
 
 	private int uid;	

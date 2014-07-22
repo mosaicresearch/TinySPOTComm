@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -43,6 +43,7 @@ import java.util.Random;
 //import com.sun.spot.util.Debug;
 import com.sun.spot.util.IEEEAddress;
 import com.sun.spot.util.Queue;
+import com.sun.spot.util.Utils;
 
 /**
  * @author Allen Ajit George
@@ -62,6 +63,7 @@ public class Sender extends Thread {
     private Random randomGen;
     private final Object queueLock = new Integer(0);
     private static final int MAX_RETRIES = 3;
+    private static final int MAX_RETRY_DELAY = 50;
     private final long ourAddress;
     
     public Sender(long ourAddress, ILowPan lowPan, Vector listeners) {
@@ -258,11 +260,12 @@ public class Sender extends Thread {
 //                + new IEEEAddress(message.getDestAddress()).asDottedHex()
 //                + " at " + System.currentTimeMillis());
 
-        
+
         byte[] buffer = message.writeMessage();
         // Debug.print("sendRREQ: about to send RREQ", 1);
-        if (!requestTable.hasRequest(message))
+        if (!requestTable.hasActiveRequest(message)) {
             requestTable.addRREQ(message, eventClient, uniqueKey);
+        }
         lowPan.sendBroadcast(Constants.AODV_PROTOCOL_NUMBER, buffer, 0,
                 buffer.length, 0);
         if (!mhRouteListeners.isEmpty()) {
@@ -291,7 +294,7 @@ public class Sender extends Thread {
 //                + " through " + new IEEEAddress(destinationAddress).asDottedHex()
 //                + " at " + System.currentTimeMillis());
         if (destinationAddress != Constants.INVALID_NEXT_HOP) {
-            for (int i=0; i< MAX_RETRIES; i++) {
+            for (int i = 0; i < MAX_RETRIES; i++) {
                 try {
                     lowPan.sendWithoutMeshingOrFragmentation(Constants.AODV_PROTOCOL_NUMBER,
                             destinationAddress, buffer, 0, buffer.length);
@@ -302,12 +305,16 @@ public class Sender extends Thread {
 //                            + " through "
 //                            + new IEEEAddress(destinationAddress).asDottedHex()
 //                            + " attempt " + i + "/" + MAX_RETRIES);
-                    routingTable.deactivateRoute(message.getDestAddress(),
-                            message.getOrigAddress());
-                    // FIXME Remove our address from the routing entry
-                    //Debug.print("sendRREP: adding a new RERR (shouldn't deadlock)", 1);
-                    sendNewRERR(message.getDestAddress(), message.getOrigAddress());
-                    //Debug.print("sendRREP: added a new RERR (didn't deadlock", 1);
+                    if (i < (MAX_RETRIES - 1)) {
+                        Utils.sleep(randomGen.nextInt(MAX_RETRY_DELAY));
+                    } else {
+                        routingTable.deactivateRoute(message.getDestAddress(),
+                                message.getOrigAddress());
+                        // FIXME Remove our address from the routing entry
+                        //Debug.print("sendRREP: adding a new RERR (shouldn't deadlock)", 1);
+                        sendNewRERR(message.getDestAddress(), message.getOrigAddress());
+                        //Debug.print("sendRREP: added a new RERR (didn't deadlock", 1);
+                    }
                 }
             }
         } else {

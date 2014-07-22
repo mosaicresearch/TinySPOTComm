@@ -30,9 +30,6 @@ package com.sun.spot.peripheral;
  * @author Syntropy
  *
  */
-/**
- *
- */
 public interface ISleepManager {
 
 	/**
@@ -147,4 +144,10 @@ public interface ISleepManager {
      */
     long getUpTime();
 
+    /**
+     * Adds the specified amount to the internal starttime variable
+     * used in the computation of UpTime. This method is automatically
+     * invoked when a user calls the setTime() method in PowerController.
+     */
+    public void adjustStartTime(long delta);
 }

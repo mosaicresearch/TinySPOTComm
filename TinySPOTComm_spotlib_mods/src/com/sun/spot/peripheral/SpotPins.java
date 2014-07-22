@@ -49,9 +49,10 @@ class SpotPins implements ISpotPins {
 	private PIOPinDefinition USB_HP;
 	private PIOPinDefinition USB_PWR_MON;
 	private PIOPinDefinition ATTENTION_Pin;
-	private PIOPinDefinition bd_rev0;
-	private PIOPinDefinition bd_rev1;
-	private PIOPinDefinition bd_rev2;
+	
+	static final PIOPinDefinition BD_REV0 = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<22, PIOPin.IO);
+	static final PIOPinDefinition BD_REV1 = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<19, PIOPin.IO);
+	static final PIOPinDefinition BD_REV2 = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<18, PIOPin.IO);
 
     private int[] pins_not_available_to_pio;
 	private ISpot spot;
@@ -144,15 +145,15 @@ class SpotPins implements ISpotPins {
 	}
 
 	public PIOPin getBD_REV0() {
-		return createPIOPin(bd_rev0);
+		return createPIOPin(BD_REV0);
 	}
 
 	public PIOPin getBD_REV1() {
-		return createPIOPin(bd_rev1);
+		return createPIOPin(BD_REV1);
 	}
 
 	public PIOPin getBD_REV2() {
-		return createPIOPin(bd_rev2);
+		return createPIOPin(BD_REV2);
 	}
 
 	
@@ -173,8 +174,10 @@ class SpotPins implements ISpotPins {
 		}
 		CC2420_CCA_Pin       = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<3, PIOPin.IO);
 		CC2420_VREG_EN_Pin   = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<1, PIOPin.IO);
-		USB_HP			     = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<19, PIOPin.IO);
-		USB_EN			     = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<20, PIOPin.IO);
+		if (hardwareType < 7) {
+			USB_HP			     = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<19, PIOPin.IO);
+			USB_EN			     = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<20, PIOPin.IO);
+		}
 		USB_PWR_MON		     = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<22, PIOPin.IO);
 		tc_TIOA = new PIOPinDefinition[6];
 		tc_TIOA[0]           = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<17, PIOPin.PERIPHERAL_B);
@@ -197,12 +200,12 @@ class SpotPins implements ISpotPins {
 		tc_TCLK[3]           = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<27, PIOPin.PERIPHERAL_B);
 		tc_TCLK[4]           = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<28, PIOPin.PERIPHERAL_B);
 		tc_TCLK[5]           = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<29, PIOPin.PERIPHERAL_B);
-		bd_rev0              = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<22, PIOPin.IO);
-		bd_rev1              = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<19, PIOPin.IO);
-		bd_rev2              = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<18, PIOPin.IO);
 	}
 
 	private synchronized PIOPin createPIOPin(PIOPinDefinition pindef) {
+		if (pindef == null) {
+			throw new IllegalStateException("Attempt to access non-existent pin");
+		}
 		if (pindef.realPIOPin == null) {
 			pindef.realPIOPin = new PIOPin(spot.getAT91_PIO(pindef.pio), pindef.pin, pindef.multiplex);
 		}

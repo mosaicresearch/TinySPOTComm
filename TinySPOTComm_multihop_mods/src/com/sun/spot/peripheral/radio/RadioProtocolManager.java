@@ -83,7 +83,7 @@ public abstract class RadioProtocolManager implements IRadioProtocolManager {
 			while (connectionIDTable.containsKey(cid)) {
 				cid.portNo++;
 				if (cid.portNo == 0) { // wrapped round
-					throw new SpotFatalException("Run out of port numbers for remote address " + new IEEEAddress(cid.getMacAddress()));
+					throw new SpotFatalException("Run out of port numbers for remote address " + IEEEAddress.toDottedHex(cid.getMacAddress()));
 				}
 			}
 		}

@@ -63,6 +63,7 @@ public class RequestTableCleaner extends Thread {
     
     public void stopThread() {
         keepRunning = false;
+        this.setPriority(Thread.MIN_PRIORITY);
         this.interrupt();
     }
 }

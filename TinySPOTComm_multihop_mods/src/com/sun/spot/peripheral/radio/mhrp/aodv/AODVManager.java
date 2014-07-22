@@ -40,11 +40,15 @@ import com.sun.spot.peripheral.radio.routing.RoutingPolicyManager;
 import com.sun.spot.peripheral.radio.routing.interfaces.IRoutingManager;
 import com.sun.spot.peripheral.radio.routing.interfaces.RouteEventClient;
 import com.sun.spot.service.IService;
+import com.sun.spot.service.ServiceRegistry;
 import java.util.Enumeration;
 
 // import com.sun.spot.util.Debug;
 
 /**
+ * Implements a Routing Manager based on the Ad Hoc On Demand Distance Vector 
+ * (AODV) Routing protocol.
+ * 
  * @author Allen Ajit George
  * @version 0.1
  */
@@ -72,34 +76,42 @@ public class AODVManager implements IRoutingManager {
     private int state = IService.STOPPED;
     
     private RoutingNeighbor advertizer;
+    private boolean advertise = true;
+    
     /**
      * constructs a new AODVManager
      */
     private AODVManager() {
         mhRouteListeners = new Vector();
+        requestTable = RequestTable.getInstance();
+        routingTable = RoutingTable.getInstance();
     }
     
     /**
-     * @return aodvManager instance of this singleton
+     * @return AODVManager instance of this singleton
      */
     public static synchronized AODVManager getInstance() {
         if (instance == null) {
-            instance = new AODVManager();
+          instance = (AODVManager)ServiceRegistry.getInstance().lookup(AODVManager.class);
+          if (instance == null) {
+              instance = new AODVManager();
+              ServiceRegistry.getInstance().add(instance);
+            }
         }
         
         return instance;
     }
     
     /**
-     * initializes this routing manager by starting the sender and receiver
-     * threads
+     * initializes this routing manager
      *
-     * @param lowPan
-     *            LowPan layer that is our route client
+     * @param lowPan LowPan layer that is our route client
      */
     public synchronized void initialize(long ourAddress, ILowPan lowPan) {
         this.ourAddress = ourAddress;
         this.lp = lowPan;
+        requestTable.setOurAddress(ourAddress);
+        routingTable.setOurAddress(ourAddress);
     }
     
     /**
@@ -177,16 +189,35 @@ public class AODVManager implements IRoutingManager {
      * supported route events
      */
     public void registerEventListener(IMHEventListener listener) {
-        this.mhRouteListeners.addElement(listener);
+        addEventListener(listener);
     }
     
     /**
      * Deregisters an application etc. that wasregistered for route events
      */
     public void deregisterEventListener(IMHEventListener listener) {
-        this.mhRouteListeners.removeElement(listener);
+        removeEventListener(listener);
     }
     
+    /**
+     * Registers an event listener that is notified when this node
+     * initiates/receives supported route events
+     *
+     * @param listener object that is notified when route events occur
+     */
+    public void addEventListener(IMHEventListener listener) {
+        this.mhRouteListeners.addElement(listener);
+    }
+
+    /**
+     * Remove the specified event listener that was registered for route events
+     *
+     * @param listener object that is notified when route events occur
+     */
+    public void removeEventListener(IMHEventListener listener) {
+        this.mhRouteListeners.removeElement(listener);
+    }
+
     /**
      * This method creates new sequence numbers.
      *
@@ -257,6 +288,33 @@ public class AODVManager implements IRoutingManager {
     }
     
     /**
+     * Control if an advertising thread will be run.
+     * <p>
+     * The AODV Routing Manager normally starts up a special thread to periodically
+     * send out a route reply message to advertise this nodes presence to its neighbors.
+     * If a SPOT application will be deep sleeping it may want to disable this
+     * advertising thread, so the SPOT will not wake up every 30 seconds.
+     * 
+     * @param enable true if advertisements should be sent periodically.
+     */
+    public void enableAdvertising(boolean enable) {
+        if (advertise != enable) {
+            advertise = enable;
+            if (enable) {
+                if (state == IService.RUNNING && !RoutingPolicyManager.getInstance().isEndNode()) {
+                    advertizer = new RoutingNeighbor(lp, ourAddress);
+                    advertizer.start();
+                }
+            } else {
+                if (advertizer != null) {
+                    advertizer.stopThread();
+                    advertizer = null;
+                }
+            }
+        }
+    }
+
+    /**
      * Stop the service, and return whether successful.
      * Stops all running threads. Closes any open IO connections.
      *
@@ -293,17 +351,13 @@ public class AODVManager implements IRoutingManager {
     public boolean start() {
         if (state != IService.RUNNING) {
             state = IService.STARTING;
-            if (!RoutingPolicyManager.getInstance().isEndNode()) {
+            if (!RoutingPolicyManager.getInstance().isEndNode() && advertise) {
                 advertizer = new RoutingNeighbor(lp, ourAddress);
                 advertizer.start();
             } else {
                 advertizer = null;
             }
-            requestTable = RequestTable.getInstance();
-            requestTable.setOurAddress(ourAddress);
             requestTable.start();
-            routingTable = RoutingTable.getInstance();
-            routingTable.setOurAddress(ourAddress);
             routingTable.start();
             sender = new Sender(ourAddress, lp, mhRouteListeners);
             receiver = new Receiver(ourAddress, sender, lp, mhRouteListeners);

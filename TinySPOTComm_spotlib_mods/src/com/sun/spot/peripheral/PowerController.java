@@ -76,7 +76,8 @@ class PowerController implements IPowerController {
 	public void setTime(long systemTimeMillis) {
         int timeHigh = (int) ((systemTimeMillis>>32) & 0xFFFFFFFF);
 		int timeLow = (int) (systemTimeMillis & 0xFFFFFFFF);
-
+		long delta = systemTimeMillis - System.currentTimeMillis();
+                
 		byte[] txBuf = new byte[9];
 		txBuf[0] = IPowerController.SET_TIME_CMD;
 		for (int i = 8; i > 0; i--) {
@@ -86,6 +87,7 @@ class PowerController implements IPowerController {
 		spiMaster.sendAndReceive(chipSelectPin, 9, txBuf, 0, 0, null);
 		
 		VM.execSyncIO(ChannelConstants.SET_SYSTEM_TIME, timeHigh, timeLow, 0, 0, 0, 0, null, null);
+		Spot.getInstance().getSleepManager().adjustStartTime(delta);
 	}	
 
 	public int getStatus() {
@@ -190,5 +192,16 @@ class PowerController implements IPowerController {
 			battery = new Battery(chipSelectPin, spiMaster);
 		}
 		return battery;
+	}
+
+	public boolean getUSBHP() {
+		return makeSingleByteQuery(IPowerController.GET_USB_HP_CMD) != 0;
+	}
+
+	public void setUSBHP(boolean high) {
+        byte[] txBuf = new byte[2];
+		txBuf[0] = IPowerController.SET_USB_HP_CMD;
+		txBuf[1] = (byte) (high ? 1 : 0);
+		spiMaster.sendAndReceive(chipSelectPin, 2, txBuf, 0, 0, null);
 	}
 }

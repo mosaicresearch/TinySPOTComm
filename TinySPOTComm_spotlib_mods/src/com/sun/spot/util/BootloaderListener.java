@@ -56,9 +56,12 @@ import com.sun.squawk.VM;
     private boolean runBootLoaderListener = true;
     private IBootloaderListenerCallback callback = null;
 
-    public BootloaderListener() {}
+    public BootloaderListener() {
+        super("BootloaderListener");
+    }
     
     public BootloaderListener(IBootloaderListenerCallback callback) {
+        super("BootloaderListener");
     	this.callback = callback;
     }
 

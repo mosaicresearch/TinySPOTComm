@@ -28,11 +28,12 @@ import java.io.IOException;
 
 import com.sun.spot.peripheral.ChannelBusyException;
 import com.sun.spot.peripheral.NoAckException;
+import com.sun.spot.peripheral.radio.mhrp.aodv.AODVManager;
+import com.sun.spot.service.BasicService;
+import com.sun.spot.service.ServiceRegistry;
 import java.util.Hashtable;
 import com.sun.spot.util.IEEEAddress;
 import com.sun.spot.util.Queue;
-import com.sun.spot.util.Utils;
-
 import java.util.Enumeration;
 import java.util.Vector;
 //import com.sun.spot.util.Debug;
@@ -45,7 +46,7 @@ import java.util.Vector;
  * @author Pete St. Pierre, refactored from original LowPanPacketDispatcher by Jochen Furthmueller.
  * 
  */
-public class RadioPacketDispatcher implements IRadioPacketDispatcher {
+public class RadioPacketDispatcher extends BasicService implements IRadioPacketDispatcher {
     private static final int MAX_PACKETS_QUEUED = 200;
     private ILowPan lowPan;
     private static IRadioPacketDispatcher theRPD;
@@ -62,10 +63,18 @@ public class RadioPacketDispatcher implements IRadioPacketDispatcher {
      */
     public synchronized static IRadioPacketDispatcher getInstance() {
         if (theRPD == null) {
-            theRPD = new RadioPacketDispatcher(RadioFactory.getI802_15_4_MACs(), RadioFactory.getRadioPolicyManager());
-            RadioFactory.setProperty("IEEE_ADDRESS", new IEEEAddress(RadioFactory.getRadioPolicyManager().getIEEEAddress()).asDottedHex());
+            theRPD = (RadioPacketDispatcher) ServiceRegistry.getInstance().lookup(RadioPacketDispatcher.class);
+            if (theRPD == null) {
+                theRPD = new RadioPacketDispatcher(RadioFactory.getI802_15_4_MACs(), RadioFactory.getRadioPolicyManager());
+                RadioFactory.setProperty("IEEE_ADDRESS", IEEEAddress.toDottedHex(RadioFactory.getRadioPolicyManager().getIEEEAddress()));
+                ServiceRegistry.getInstance().add((RadioPacketDispatcher)theRPD);
+            }
         }
         return theRPD;
+    }
+
+    public String getServiceName() {
+        return "RadioPacketDispatcher";
     }
     
     private RadioPacketDispatcher(I802_15_4_MAC[] macs, IRadioPolicyManager radioPolicyManager) {
@@ -84,21 +93,37 @@ public class RadioPacketDispatcher implements IRadioPacketDispatcher {
      * @param packetListener the class that wants to be called back
      */
     public void registerPacketQualityListener(IPacketQualityListener packetListener) {
-        this.packetListener.addElement(packetListener);
-        if (packetFwdThread == null) {
-            packetFwdThread = new PacketQualityForwarderThread();
-            packetFwdThread.start();
-        }
+        addPacketQualityListener(packetListener);
     }
     /**
      * Undo a previous call of registerPacketListener()
      * @param listener the class that wants to be deregistered
      */
     public void deregisterPacketQualityListener(IPacketQualityListener listener) {
+        removePacketQualityListener(listener);
+    }
+
+    /**
+     * Register to be notified with Link Quality information.
+     * @param packetListener the class that wants to be called back
+     */
+    public void addPacketQualityListener(IPacketQualityListener packetListener) {
+        this.packetListener.addElement(packetListener);
+        if (packetFwdThread == null) {
+            packetFwdThread = new PacketQualityForwarderThread();
+            packetFwdThread.start();
+        }
+    }
+
+    /**
+     * Undo a previous call of registerPacketListener()
+     * @param listener the class that wants to be deregistered
+     */
+    public void removePacketQualityListener(IPacketQualityListener listener){
         this.packetListener.removeElement(listener);
         if (this.packetListener.isEmpty()) packetFwdThread = null;
-        
     }
+
     /**
      * Broadcast a packet. Called from sendPacket if destination is a broadcast or unknown
      * @param rp
@@ -114,8 +139,8 @@ public class RadioPacketDispatcher implements IRadioPacketDispatcher {
             rp.setSourceAddress(macList[i].getOurAddress());
             
             //Debug.print("sendPacket: sending packet from "
-            //+ new IEEEAddress(rp.getSourceAddress()).asDottedHex()+" to "
-            //+ new IEEEAddress(rp.getDestinationAddress()).asDottedHex(), 1);
+            //+ IEEEAddress.toDottedHex(rp.getSourceAddress()) +" to "
+            //+ IEEEAddress.toDottedHex(rp.getDestinationAddress()), 1);
             
             int result;
             result = macList[i].getMacDevice().mcpsDataRequest(rp);
@@ -137,10 +162,7 @@ public class RadioPacketDispatcher implements IRadioPacketDispatcher {
      * @throws ChannelBusyException
      */
     public void sendPacket(RadioPacket rp) throws NoAckException, ChannelBusyException {
-    	
-    	
-    	
-        //   System.out.println("[RPD] Sending packet to: " + new IEEEAddress(rp.getDestinationAddress()).asDottedHex());
+        //   System.out.println("[RPD] Sending packet to: " + IEEEAddress.toDottedHex(rp.getDestinationAddress()));
         MACDescriptor macDesc = (MACDescriptor)macTable.get(new Long(rp.getDestinationAddress()));
         if (macDesc == null) {
             //       System.out.println("[RPD] Sending a broadcast");
@@ -150,8 +172,8 @@ public class RadioPacketDispatcher implements IRadioPacketDispatcher {
             rp.setSourceAddress(macDesc.getOurAddress());
             
 //                System.out.println("sendPacket: sending packet from "
-//                + new IEEEAddress(rp.getSourceAddress()).asDottedHex()+" to "
-//                + new IEEEAddress(rp.getDestinationAddress()).asDottedHex());
+//                + IEEEAddress.toDottedHex(rp.getSourceAddress()) +" to "
+//                + IEEEAddress.toDottedHex(rp.getDestinationAddress()));
             
             int result;
             result = macDesc.getMacDevice().mcpsDataRequest(rp);
@@ -194,7 +216,7 @@ public class RadioPacketDispatcher implements IRadioPacketDispatcher {
         MACDescriptor macDesc;
         
         DispatcherThread(MACDescriptor desc) {
-            super("RadioPacketDispatcher:"+ new IEEEAddress(desc.getOurAddress()).asDottedHex());
+            super("RadioPacketDispatcher:"+ IEEEAddress.toDottedHex(desc.getOurAddress()));
             this.macDesc = desc;
         }
         

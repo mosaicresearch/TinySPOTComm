@@ -68,6 +68,11 @@ interface IOTACommandProcessor {
 	 */
 	Date timeOfLastMessageFromHost();
 
+    /**
+     * @return the time that this OTA session was started
+     */
+    public long getStartTime();
+
 	IEEEAddress getBasestationAddress();
 
 	boolean isAlive();
