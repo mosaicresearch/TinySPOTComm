@@ -59,12 +59,6 @@ import com.sun.squawk.Unsafe;
     private static final int PIO_BSR	= 29;          /* Peripheral B Select Register */
 //    private static final int PIO_ABSR	= 30;          /* A B Status Register */
         
-	private static int[] PIO_IDS = {
-			IAT91_Peripherals.PIOA_ID_MASK,
-			IAT91_Peripherals.PIOB_ID_MASK,
-			IAT91_Peripherals.PIOC_ID_MASK,
-			IAT91_Peripherals.PIOD_ID_MASK};
-
     // per-PIO data
     
     private int claims;
@@ -72,6 +66,7 @@ import com.sun.squawk.Unsafe;
 	private IAT91_PowerManager powerManager;
 	private int outstandingIrqs;
 	private int unavailablePins;
+	private int PIO_ID;
 
 	private Object syncObjectForWaitForIrq;
 
@@ -81,6 +76,10 @@ import com.sun.squawk.Unsafe;
 	    outstandingIrqs = 0;
 	    this.aic = aic;
 	    this.powerManager = powerManager;
+        AT91_Peripherals spotMasks = Spot.getInstance().getAT91_Peripherals();
+        PIO_ID = (pioSelector == PIOA) ? spotMasks.PIOA_ID_MASK :
+                 (pioSelector == PIOB) ? spotMasks.PIOB_ID_MASK :
+                 (pioSelector == PIOC) ? spotMasks.PIOC_ID_MASK : spotMasks.PIOD_ID_MASK;
 	    disableIrq(~0); // all pins
 	    setUp();
 	}
@@ -153,7 +152,7 @@ import com.sun.squawk.Unsafe;
 	public void waitForIrq(int irq) throws InterruptedException {
 		while (!myPinHasChanged(irq)) {
 			if (syncObjectAvailable()) {
-				aic.waitForInterrupt(PIO_IDS[pioSelector]);
+				aic.waitForInterrupt(PIO_ID);
 				updateOutstandingIrqs();
 				boolean myPinChanged = myPinHasChanged(irq);
 				Object syncObject = syncObjectForWaitForIrq;
@@ -161,7 +160,7 @@ import com.sun.squawk.Unsafe;
 					disableIrq(irq);
 				}
 				releaseSyncObject();
-				aic.enableIrq(PIO_IDS[pioSelector]);
+				aic.enableIrq(PIO_ID);
 				synchronized (syncObject) {
 					syncObject.notifyAll();
 				}
@@ -182,22 +181,22 @@ import com.sun.squawk.Unsafe;
 	}
 
 	public void setUp() {
-		powerManager.enablePeripheralClock(PIO_IDS[pioSelector]);
+		powerManager.enablePeripheralClock(PIO_ID);
 	    // select all available lines to be inputs
 		Unsafe.setInt(baseAddress, PIO_ODR, ~unavailablePins) ;
 	    // select PIO control for all available lines
     	Unsafe.setInt(baseAddress, PIO_PER, ~unavailablePins);
 		// configure interrupt in AIC
-		aic.configure(PIO_IDS[pioSelector], IAT91_AIC.AIC_IRQ_PRI_NORMAL, IAT91_AIC.SRCTYPE_HIGH_LEVEL);
+		aic.configure(PIO_ID, IAT91_AIC.AIC_IRQ_PRI_NORMAL, IAT91_AIC.SRCTYPE_HIGH_LEVEL);
 		// unmask interrupt in AIC
-		aic.enableIrq(PIO_IDS[pioSelector]);
+		aic.enableIrq(PIO_ID);
 	}
 
 	public boolean tearDown() {
-		Utils.log(getDriverName() + ": Claims are" + claims);
+		Utils.log(getDriverName() + ": Claims are " + Integer.toHexString(claims));
 		if (claims == unavailablePins) {
-			aic.disableIrq(PIO_IDS[pioSelector]);
-			powerManager.disablePeripheralClock(PIO_IDS[pioSelector]);
+			aic.disableIrq(PIO_ID);
+			powerManager.disablePeripheralClock(PIO_ID);
 			return true;
 		}
 		return false;

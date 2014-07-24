@@ -1,5 +1,6 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2010 Oracle. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -17,21 +18,18 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA
  * 
- * Please contact Sun Microsystems, Inc., 16 Network Circle, Menlo
- * Park, CA 94025 or visit www.sun.com if you need additional
- * information or have any questions.
+ * Please contact Oracle, 16 Network Circle, Menlo Park, CA 94025 or
+ * visit www.oracle.com if you need additional information or have
+ * any questions.
  */
 
 package com.sun.spot.peripheral.radio;
 
 
-import com.sun.spot.interisolate.InterIsolateServer;
 import com.sun.spot.peripheral.ChannelBusyException;
 import com.sun.spot.peripheral.NoAckException;
 import com.sun.spot.peripheral.NoRouteException;
-import com.sun.spot.peripheral.radio.LowPanHeader;
-import com.sun.spot.peripheral.radio.proxy.IRadioServerContext;
-import com.sun.spot.peripheral.radio.proxy.ProxyRadiogramProtocolManager;
+import com.sun.spot.resources.Resources;
 
 
 /* (non-Javadoc)
@@ -48,22 +46,13 @@ public class RadiogramProtocolManager extends RadioProtocolManager implements IP
 	public static final String PROTOCOL_NAME = "radiogram";
 	private static IRadiogramProtocolManager theInstance;
 	
-	public static void main(String[] args) {
-		InterIsolateServer.run(ProxyRadiogramProtocolManager.CHANNEL_IDENTIFIER, 
-			new IRadioServerContext() {
-				public IRadioProtocolManager getRadioProtocolManager() {
-					return RadiogramProtocolManager.getInstance();
-				}
-			});
-	}
-
 	public synchronized static IRadiogramProtocolManager getInstance() {
 		if (theInstance == null) {
-			if (RadioFactory.isMasterIsolate()) {
-				theInstance = new RadiogramProtocolManager();
-			} else {
-				theInstance = new ProxyRadiogramProtocolManager(PROTOCOL_NUMBER, PROTOCOL_NAME);
-			}
+            theInstance = (IRadiogramProtocolManager)Resources.lookup(IRadiogramProtocolManager.class);
+            if (theInstance == null) {
+                theInstance = new RadiogramProtocolManager();
+                Resources.add((RadiogramProtocolManager)theInstance);
+            }
 		}
 		return theInstance;
 	}

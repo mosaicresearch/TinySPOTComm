@@ -1,5 +1,6 @@
 /*
  * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2010 Oracle. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -17,10 +18,11 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA
  * 
- * Please contact Sun Microsystems, Inc., 16 Network Circle, Menlo
- * Park, CA 94025 or visit www.sun.com if you need additional
- * information or have any questions.
+ * Please contact Oracle, 16 Network Circle, Menlo Park, CA 94025 or
+ * visit www.oracle.com if you need additional information or have
+ * any questions.
  */
+
 /*
  * Copyright (C) 2009  Daniel van den Akker	(daniel.vandenakker@ua.ac.be)
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
@@ -40,14 +42,15 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
+
 package com.sun.spot.peripheral.radio;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 
+//import for TinySPOTComm project
 import be.ac.ua.pats.tinyspotcomm.IEEEAddressHash;
-
 import com.sun.spot.peripheral.SpotFatalException;
 import com.sun.spot.util.CRC;
 import com.sun.spot.util.IEEEAddress;
@@ -62,39 +65,39 @@ import com.sun.spot.util.Utils;
  * and contents varies also. For more details about the packet formats, see the first
  * reference below.<br><br>
  * 
- * To obtain RadioPackets, call one of {@link #getAckPacket()}, {@link #getBroadcastPacket(int)}, 
- * {@link #getDataPacket(int)}.
+ * To obtain RadioPackets, call one of {@link #getAckPacket()}, {@link #getBroadcastPacket()}, 
+ * {@link #getDataPacket()}.
  * 
  * Once a packet has been received from the physical radio, clients - such as the MAC layer -
  * should call {@link #decodeFrameControl()} to decode the MAC header. Until this is done,
  * accessors for addresses, PAN id and other information will not return correct values.
  * 
- * { @see <a href="http://standards.ieee.org/getieee802/index.html">http://standards.ieee.org/getieee802/index.html</a> }
- * 
- * Changed by Daniel van den Akker 10/2008 : 
+ * @see <a href="http://standards.ieee.org/getieee802/index.html">http://standards.ieee.org/getieee802/index.html</a>
+
+* Changed by Daniel van den Akker 10/2008 : 
  * 		-extended support for 16-bit adressing
  * 		-added automatic 64 <-> 16bit address conversions for compatibilty with the rest of the SunSPOT stack
  * 	
  */
+
 public class RadioPacket {
+    
+    ////////////////////////////////////Modification//////////////////////////////////////////////////////////////////
+        /**
+     * @author Daniel van den Akker
+     * Selects 16-bit addressing
+     */
+    public static final int ADDR_16 = 0;
+    /**
+     * @author Daniel van den Akker
+     * Selects 64-bit addressing
+     */
+    public static final int ADDR_64 = 1;
+    
+    private static final IEEEAddressHash hasher = IEEEAddressHash.getInstance();
+
+   ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	
-	/**
-	 * @author Daniel van den Akker
-	 * Selects 16-bit addressing
-	 */
-	public static final int ADDR_16 = 0;
-	/**
-	 * @author Daniel van den Akker
-	 * Selects 64-bit addressing
-	 */
-	public static final int ADDR_64 = 1;
-	
-	
-	private static final IEEEAddressHash hasher = IEEEAddressHash.getInstance();
-	
-	/**
-	 * The total number of bytes that may be sent in a single packet, including the MAC header
-	 */
 	public static final int MAX_DATA_LENGTH = 125;
 	private static final int BUFFER_SIZE	= MAX_DATA_LENGTH + 1 /* for length byte */ + 2 /* for FCS */;
 
@@ -107,29 +110,28 @@ public class RadioPacket {
 	public static final int MIN_PAYLOAD_LENGTH = MAX_DATA_LENGTH - MAX_HEADER_LENGTH; 
 
 	// Offsets applicable to all packet types
-	private static final int LENGTH_OFFSET		 			= 0;
-	private static final int FCF_OFFSET		 				= 1;
-	private static final int DSN_OFFSET					 	= 3;
+	private static final int LENGTH_OFFSET = 0;
+	private static final int FCF_OFFSET = 1;
+	private static final int DSN_OFFSET = 3;
 
 	// See discussion under getLinkQuality
 	private static final int LINK_QUALITY_STEPS = 255;
 	private static final int CORRELATION_LOW = 50;
 	private static final int CORRELATION_HIGH = 110;
 
-	private static final int FRAME_TYPE 		= 7;
-	private static final int FRAME_TYPE_DATA	= 1;
-	private static final int FRAME_TYPE_ACK 	= 2;
-			static final int ACK_REQUEST		= 1 << 5;
-	private static final int INTRA_PAN			= 1 << 6;
-	private static final int DST_ADDR_BITS		= 3 << 10;
-	private static final int DST_ADDR_NONE		= 0;
-	private static final int DST_ADDR_16		= 2 << 10;
-	private static final int DST_ADDR_64		= 3 << 10;
-	private static final int SRC_ADDR_BITS		= 3 << 14;
-	private static final int SRC_ADDR_NONE		= 0;
-	private static final int SRC_ADDR_16		= 2 << 14;
-	private static final int SRC_ADDR_64		= 3 << 14;
-	 
+	private static final int FRAME_TYPE = 7;
+	private static final int FRAME_TYPE_DATA = 1;
+	private static final int FRAME_TYPE_ACK = 2;
+	static final int ACK_REQUEST = 1 << 5;
+	private static final int INTRA_PAN = 1 << 6;
+	private static final int DST_ADDR_BITS = 3 << 10;
+	private static final int DST_ADDR_NONE = 0;
+	private static final int DST_ADDR_16 = 2 << 10;
+	private static final int DST_ADDR_64 = 3 << 10;
+	private static final int SRC_ADDR_BITS = 3 << 14;
+	private static final int SRC_ADDR_NONE = 0;
+	private static final int SRC_ADDR_16 = 2 << 14;
+	private static final int SRC_ADDR_64 = 3 << 14;
 	
 	/*
 	private static int[] crc_table = new int[256];
@@ -139,6 +141,7 @@ public class RadioPacket {
 	// Offsets whose location varies according to packet type
 	private int destinationPanOffset;
 	private int destinationAddressOffset;
+	private int sourcePanOffset;
 	private int sourceAddressOffset;
 	private int payloadOffset;
 	
@@ -151,6 +154,13 @@ public class RadioPacket {
 	
 	/**
 	 * Answer a radio packet preformatted for sending data.
+	 * 
+	 * @return -- the RadioPacket.
+	 */
+        
+//////////////////////////Modification////////////////////////////////////////////////////////////////////////////
+       	/**
+	 * Answer a radio packet preformatted for sending data.
 	 * @param 	address_mode the address mode used: must be one of RadioPacket.ADDR_16 or RadioPacket.ADDR_64
 	 * 			the selected address mode is used for both sender and receiver address
 	 * 			Added by Daniel van den Akker: 10/2008
@@ -161,7 +171,7 @@ public class RadioPacket {
 		result.initAsData(address_mode);
 		return result;
 	}
-	
+        
 	/**
 	 * Answer a radio packet preformatted for sending data.
 	 * address mode used is 64 bits
@@ -170,7 +180,7 @@ public class RadioPacket {
 	public static RadioPacket getDataPacket() {
 		return getDataPacket(ADDR_64);
 	}
-	
+
 	/**
 	 * Answer a radio packet preformatted for sending ACKs.
 	 * 
@@ -181,7 +191,7 @@ public class RadioPacket {
 		result.initAsAck();
 		return result;
 	}
-	
+
 	/**
 	 * Answer a radio packet preformatted for broadcasting intra-PAN. Extra-PAN
 	 * broadcasting is not currently formatted.
@@ -205,6 +215,7 @@ public class RadioPacket {
 	{
 		return getBroadcastPacket(ADDR_64);
 	}
+        
 	/**
 	 * Private to force use of the static methods
 	 */
@@ -212,36 +223,37 @@ public class RadioPacket {
 		this.buffer = new byte[BUFFER_SIZE];
 	}
 
-	private void initAsData(int address_mode)
-	{
-		//Added for TinySPOTComm project : allow 16-bit addressed data-frames
-		if ((address_mode & ADDR_64) == ADDR_64)
-			setFrameControl(FRAME_TYPE_DATA | ACK_REQUEST | INTRA_PAN | DST_ADDR_64 | SRC_ADDR_64);
-		else
-			setFrameControl(FRAME_TYPE_DATA | ACK_REQUEST | INTRA_PAN | DST_ADDR_16 | SRC_ADDR_16);
-		
-		setOffsets();
-		setLength(payloadOffset - 1); // subtract one for length byte
-	}
+        private void initAsData(int address_mode) {
+	    //Added for TinySPOTComm project : allow 16-bit addressed data-frames
+	    if ((address_mode & ADDR_64) == ADDR_64)
+		setFrameControl(FRAME_TYPE_DATA | ACK_REQUEST | INTRA_PAN | DST_ADDR_64 | SRC_ADDR_64);
+	    else
+		setFrameControl(FRAME_TYPE_DATA | ACK_REQUEST | INTRA_PAN | DST_ADDR_16 | SRC_ADDR_16);
 
+            setOffsets();
+            setLength(payloadOffset - 1); // subtract one for length byte
+        }
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        
 	private void setOffsets() {
 		int frameControl = getFrameControl();
 		if (isAck()) {
 			destinationPanOffset = -1;
 			destinationAddressOffset = -1;
+                        sourcePanOffset = -1;
 			sourceAddressOffset = -1;
 			payloadOffset = -1;
 		} else if (isData()) {
-			if ((frameControl & INTRA_PAN) == 0) {
-				throw new IllegalStateException("Inter-pan communication not supported");
-			}
+                        boolean panCompression = (frameControl & INTRA_PAN) != 0;
 			int addrMode = frameControl & DST_ADDR_BITS;
 			switch (addrMode) {
 			case DST_ADDR_NONE:
 				destinationPanOffset = -1;
 				destinationAddressOffset = -1;
 				sourceAddressOffset = 4;
-				break;
+        		throw new IllegalStateException("Packets without a destination address are not supported");
+//				break;
 			case DST_ADDR_64:
 				destinationPanOffset = 4;
 				destinationAddressOffset = 6;
@@ -261,36 +273,53 @@ public class RadioPacket {
 			case SRC_ADDR_NONE:
 				payloadOffset = sourceAddressOffset;
 				sourceAddressOffset = -1;
-				break;
+        		        throw new IllegalStateException("Packets without a source address are not supported");
+//				break;
 			case SRC_ADDR_64:
-				payloadOffset = sourceAddressOffset + 8;
-				break;
-			case SRC_ADDR_16:
-				payloadOffset = sourceAddressOffset + 2;
-				break;
+                            if (panCompression && destinationPanOffset > 0) {
+                                sourcePanOffset = destinationPanOffset;
+                            } else {
+                                sourcePanOffset = sourceAddressOffset;
+                                sourceAddressOffset += 2;
+                            }
+                            payloadOffset = sourceAddressOffset + 8;
+                            break;
+                        case SRC_ADDR_16:
+                            if (panCompression && destinationPanOffset > 0) {
+                                sourcePanOffset = destinationPanOffset;
+                            } else {
+                                sourcePanOffset = sourceAddressOffset;
+                                sourceAddressOffset += 2;
+                            }
+			    payloadOffset = sourceAddressOffset + 2;
+			    break;
 			default:
 				throw new IllegalStateException("Unsupported src addr mode " + addrMode);
 			}
-		}
+//            if (panCompression && sourcePanOffset != destinationPanOffset) {
+//        		throw new IllegalStateException("Inter-pan communication not supported");
+//            }
+            }
 	}
-	private void initAsBroadcast(int address_mode)
-	{
-		//Added for TinySPOTComm project : allow broadcast packets with 16-bit source addresses
-		if ((address_mode & ADDR_64) == ADDR_64)
-			setFrameControl(FRAME_TYPE_DATA | INTRA_PAN | DST_ADDR_16 | SRC_ADDR_64);
-		else
-			setFrameControl(FRAME_TYPE_DATA | INTRA_PAN | DST_ADDR_16 | SRC_ADDR_16);
-		
-		setOffsets();
-		setDestinationAddress(0xFFFF);
-		setLength(payloadOffset - 1); // subtract one for length byte
-	}
+        
+////////////////////////////////////////////////////////Modification//////////////////////////////////////////////////////////////////////////////
+        private void initAsBroadcast(int address_mode) {
+	    //Added for TinySPOTComm project : allow broadcast packets with 16-bit source addresses
+	    if ((address_mode & ADDR_64) == ADDR_64)
+		setFrameControl(FRAME_TYPE_DATA | INTRA_PAN | DST_ADDR_16 | SRC_ADDR_64);
+	    else
+		setFrameControl(FRAME_TYPE_DATA | INTRA_PAN | DST_ADDR_16 | SRC_ADDR_16);
 
-	private void initAsAck() {
-		setFrameControl(FRAME_TYPE_ACK);
-		setLength(3);
-		setOffsets();
-	}
+            setOffsets();
+            setDestinationAddress(0xFFFF);
+            setLength(payloadOffset - 1); // subtract one for length byte
+        }
+        
+        private void initAsAck() {
+            setFrameControl(FRAME_TYPE_ACK);
+            setLength(3);
+            setOffsets();
+        }
 
 	/**
 	 * Answer the destination address of this packet. Will throw an IllegalStateException
@@ -299,78 +328,78 @@ public class RadioPacket {
 	 * 
 	 * @return -- the address
 	 */
-	public long getDestinationAddress() {
-		if (destinationAddressOffset == -1) {
-			throw new IllegalStateException("Field not valid for this packet");
-		}
-		long result = 0;
-		//Added for TinySPOTComm project : perform automatic 16 -> 64 bit conversion
-		if ((getFrameControl() & DST_ADDR_BITS) == DST_ADDR_16) {
-			result = hasher.To64Bit(getShortAt(destinationAddressOffset));
-		} else {
-			result = getLongAt(destinationAddressOffset);
-		}
-		return result;
-	}
-
+        public long getDestinationAddress() {
+            if (destinationAddressOffset == -1) {
+                throw new IllegalStateException("Field not valid for this packet");
+            }
+            long result = 0;
+	    //Added for TinySPOTComm project : perform automatic 16 -> 64 bit conversion
+	    if ((getFrameControl() & DST_ADDR_BITS) == DST_ADDR_16) {
+		result = hasher.To64Bit(getShortAt(destinationAddressOffset));
+	    } else {
+		result = getLongAt(destinationAddressOffset);
+	    }
+            return result;
+        }
+        
+        
 	/**
 	 * Set the destination address for the packet. If the packet can't have a destination,
 	 * for example an ACK packet, throw IllegalStateException. 
 	 * 
 	 * @param addr - the address to set. If addressing mode is 16 bit, the lower 2 bytes are used as address
 	 */
-	public void setDestinationAddress(long addr) {
-		if (destinationAddressOffset == -1) {
-			throw new IllegalStateException("Field not valid for this packet");
-		}
-		if ((getFrameControl() & DST_ADDR_BITS) == DST_ADDR_16) {
-			//Added for TinySPOTComm project : perform automatic 64 -> 16 bit conversion
-			setShortAt(destinationAddressOffset, hasher.To16Bit(addr));
-		} else {
-			setLongAt(destinationAddressOffset, addr);
-		}
-	}
-
-	/**
-	 * Answer the source address of this packet. Will throw an IllegalStateException
-	 * if this is an ACK packet and therefore has no source. 
-	 * 
-	 * @return -- the address
-	 */
-	public long getSourceAddress() {
-		if (sourceAddressOffset == -1) {
-			throw new IllegalStateException("Field not valid for this packet");
-		}
-		//Added for TinySPOTComm project : perform automatic 16 -> 64 bit conversion
-		long result = 0;
-		if ((getFrameControl() & DST_ADDR_BITS) == DST_ADDR_16) {
-			result = hasher.To64Bit(getShortAt(sourceAddressOffset));
-		} else {
-			result = getLongAt(sourceAddressOffset);
-		}
-		return result;	
-	}
-
-	/**
-	 * Set the source address for the packet. If the packet can't have a source,
-	 * for example an ACK packet, throw IllegalStateException. 
-	 * 
-	 * @param addr - the address to set. If addressing mode is 16 bit, the lower 2 bytes are used as address
-	 */
-	public void setSourceAddress(long addr) {
-
-		if (sourceAddressOffset == -1) {
-			throw new IllegalStateException("Field not valid for this packet");
-		}
+        public void setDestinationAddress(long addr) {
+            if (destinationAddressOffset == -1) {
+                throw new IllegalStateException("Field not valid for this packet");
+            }
+            if ((getFrameControl() & DST_ADDR_BITS) == DST_ADDR_16) {
 		//Added for TinySPOTComm project : perform automatic 64 -> 16 bit conversion
-		if ((getFrameControl() & SRC_ADDR_BITS) == SRC_ADDR_16) {
-		
-			setShortAt(sourceAddressOffset, hasher.To16Bit(addr));
-		} else {
-			setLongAt(sourceAddressOffset, addr);
-		}
-	}
+		setShortAt(destinationAddressOffset, hasher.To16Bit(addr));
+            } else {
+                setLongAt(destinationAddressOffset, addr);
+            }
+        }
 
+        /**
+         * Answer the source address of this packet. Will throw an IllegalStateException
+         * if this is an ACK packet and therefore has no source.
+         *
+         * @return -- the address
+         */
+        public long getSourceAddress() {
+            if (sourceAddressOffset == -1) {
+                throw new IllegalStateException("Field not valid for this packet");
+            }
+	    //Added for TinySPOTComm project : perform automatic 16 -> 64 bit conversion
+	    long result = 0;
+	    if ((getFrameControl() & DST_ADDR_BITS) == DST_ADDR_16) {
+		result = hasher.To64Bit(getShortAt(sourceAddressOffset));
+	    } else {
+		result = getLongAt(sourceAddressOffset);
+	    }
+            return result;
+        }
+        
+        /**
+         * Set the source address for the packet. If the packet can't have a source,
+         * for example an ACK packet, throw IllegalStateException.
+         *
+         * @param addr - the address to set. If addressing mode is 16 bit, the lower 2 bytes are used as address
+         */
+        public void setSourceAddress(long addr) {
+
+            if (sourceAddressOffset == -1) {
+                throw new IllegalStateException("Field not valid for this packet");
+            }
+            //Added for TinySPOTComm project : perform automatic 64 -> 16 bit conversion
+	    if ((getFrameControl() & SRC_ADDR_BITS) == SRC_ADDR_16) {
+		setShortAt(sourceAddressOffset, hasher.To16Bit(addr));
+	    } else {
+		setLongAt(sourceAddressOffset, addr);
+	    }
+        }
+          
 	/**
 	 * Answer the source pan ID of this packet. Throw an IllegalStateException
 	 * if the receiver is an ACK packet and cannot have a pan ID.
@@ -378,7 +407,10 @@ public class RadioPacket {
 	 * @return -- the pan ID
 	 */
 	public int getSourcePanID() {
-		return getDestinationPanID();
+		if (sourcePanOffset == -1) {
+			throw new IllegalStateException("Field not valid for this packet");
+		}
+		return getShortAt(sourcePanOffset);
 	}
 
 	/**
@@ -387,25 +419,56 @@ public class RadioPacket {
 	 * 
 	 * @return -- the pan ID
 	 */
-	public int getDestinationPanID() {
+	 public int getDestinationPanID() {
 		if (destinationPanOffset == -1) {
 			throw new IllegalStateException("Field not valid for this packet");
 		}
 		return getShortAt(destinationPanOffset);
 	}
-	/**
-	 * Set the destination pan ID of this packet. Throw an IllegalStateException
-	 * if the receiver is an ACK packet and cannot have a pan ID.
-	 * 
-	 * @param id the pan id to set
-	 */
-	public void setDestinationPanID(int id) {
-		if (destinationPanOffset == -1) {
-			throw new IllegalStateException("Field not valid for this packet");
-		}
-		setShortAt(destinationPanOffset, id);
-	}
+        
+/**********************/
+        
+                /**
+         * Answer the source pan ID of this packet. Throw an IllegalStateException
+         * if the receiver is an ACK packet and cannot have a pan ID.
+         *
+         * @return -- the pan ID
+         */
+   /*     public int getSourcePanID() {
+            return getDestinationPanID();
+        }
+
+        /**
+         * Answer the destination pan ID of this packet. Throw an IllegalStateException
+         * if the receiver is an ACK packet and cannot have a pan ID.
+         *
+         * @return -- the pan ID
+         */
+  /*      public int getDestinationPanID() {
+            if (destinationPanOffset == -1) {
+                throw new IllegalStateException("Field not valid for this packet");
+            }
+            return getShortAt(destinationPanOffset);
+        }
+/********************************
+         
+         */                
+        /**
+         * Set the destination pan ID of this packet. Throw an IllegalStateException
+         * if the receiver is an ACK packet and cannot have a pan ID.
+         *
+         * @param id the pan id to set
+         */
+        public void setDestinationPanID(int id) {
+            if (destinationPanOffset == -1) {
+                throw new IllegalStateException("Field not valid for this packet");
+            }
+            setShortAt(destinationPanOffset, id);
+        }
 	
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        
+        
 	/**
 	 * Answer the DSN (as defined by the I802.15.4 standard) of this packet.
 	 * 
@@ -877,11 +940,17 @@ public class RadioPacket {
 		if (isData()) result.append("dat ");
 		result.append("seq ");
 		result.append(getDataSequenceNumber());
-		result.append(" ("); result.append(getLength()); result.append("bytes) from ");
+		result.append(" (");
+                result.append(getLength()); 
+                result.append("bytes) from ");
 		if (!isAck()) {
-			result.append(IEEEAddress.toDottedHex(getSourceAddress())); result.append(" to "); result.append(IEEEAddress.toDottedHex(getDestinationAddress())); result.append(" [");
+			result.append(IEEEAddress.toDottedHex(getSourceAddress())); 
+                        result.append(" to "); 
+                        result.append(IEEEAddress.toDottedHex(getDestinationAddress())); 
+                        result.append(" [");
 			for (int i = 0; i < getMACPayloadLength(); i++) {
-				result.append((i==0 ? "" : " ")); result.append(Integer.toHexString((0xFF & getMACPayloadAt(i))));
+				result.append((i==0 ? "" : " ")); 
+                                result.append(Integer.toHexString((0xFF & getMACPayloadAt(i))));
 			}
 			result.append("]");
 		}

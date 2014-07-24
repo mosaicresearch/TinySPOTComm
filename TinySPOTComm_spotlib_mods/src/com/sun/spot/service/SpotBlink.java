@@ -1,5 +1,5 @@
 /*
- * Copyright 2009 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2009-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  *
  * This code is free software; you can redistribute it and/or modify
@@ -24,7 +24,7 @@
 
 package com.sun.spot.service;
 
-import com.sun.spot.peripheral.ILed;
+import com.sun.spot.resources.transducers.ILed;
 import com.sun.spot.peripheral.Spot;
 import com.sun.spot.util.Utils;
 
@@ -39,6 +39,7 @@ public class SpotBlink extends BasicService implements ISpotBlink {
     private static final int DEFAULT_DURATION = 5;
 
     public SpotBlink() {
+        addTag("service=" + getServiceName());
     }
 
     /**

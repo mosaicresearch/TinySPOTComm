@@ -33,6 +33,9 @@ import com.sun.spot.peripheral.radio.ConnectionID;
 import com.sun.spot.peripheral.radio.IRadiostreamProtocolManager;
 import com.sun.spot.peripheral.radio.NoMeshLayerAckException;
 
+/**
+ * @deprecated No longer needed: all Isolates now use a global radio resource.
+ */
 public class ProxyRadiostreamProtocolManager extends ProxyRadioProtocolManager implements IRadiostreamProtocolManager {
 	public static final String CHANNEL_IDENTIFIER = "RADIOSTREAM_SERVER";
 	

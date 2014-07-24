@@ -1,5 +1,6 @@
 /*
  * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2010 Oracle. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -17,9 +18,9 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA
  * 
- * Please contact Sun Microsystems, Inc., 16 Network Circle, Menlo
- * Park, CA 94025 or visit www.sun.com if you need additional
- * information or have any questions.
+ * Please contact Oracle, 16 Network Circle, Menlo Park, CA 94025 or
+ * visit www.oracle.com if you need additional information or have
+ * any questions.
  */
 
 package com.sun.spot.peripheral;
@@ -51,12 +52,26 @@ package com.sun.spot.peripheral;
  * In either mode the rate at which the Timer counts is determined by which internal clock is
  * used. The available clock speeds are:
  *<ul>
- *<li> 29,952 Khz:  One count = 0.0334 usec. Max duration = 2.188 msec. ({@link TimerCounterBits#TC_CLKS_MCK2})
- *<li> 7,488 Khz:  One count = 0.1335 usec. Max duration = 8.752 msec. ({@link TimerCounterBits#TC_CLKS_MCK8})
- *<li> 1,872 Khz:  One count = 0.5342 usec. Max duration = 35.009 msec. ({@link TimerCounterBits#TC_CLKS_MCK32})
- *<li>  468 Khz:  One count = 2.1368 usec. Max duration = 140.034 msec. ({@link TimerCounterBits#TC_CLKS_MCK128})
- *<li>  32.768 Khz:  One count = 30.5176 usec. Max duration = 2,000 msec = 2 sec. ({@link TimerCounterBits#TC_CLKS_SLCK})
+ * <li> For the rev8 SPOT where MCK=133.3 MHz:<br><br>
+ *<ul>
+ *<li> 66,662 KHz:   One count =  0.0150 usec. Max duration =  0.983 msec. ({@link TimerCounterBits#TC_CLKS_MCK2})
+ *<li> 16,666 KHz:   One count =  0.0600 usec. Max duration =  3.933 msec. ({@link TimerCounterBits#TC_CLKS_MCK8})
+ *<li>  4,166 KHz:   One count =  0.2400 usec. Max duration = 15.730 msec. ({@link TimerCounterBits#TC_CLKS_MCK32})
+ *<li>  1,042 KHz:   One count =  0.9601 usec. Max duration = 62.920 msec. ({@link TimerCounterBits#TC_CLKS_MCK128})
+ *<li>     32.768 KHz:  One count = 30.5176 usec. Max duration = 2,000 msec = 2 sec. ({@link TimerCounterBits#TC_CLKS_SLCK})
+ *</ul><br>
+ * <li> For the rev6 SPOT where MCK=59.9 MHz:<br><br>
+ *<ul>
+ *<li> 29,952 KHz:  One count = 0.0334 usec. Max duration =   2.188 msec. ({@link TimerCounterBits#TC_CLKS_MCK2})
+ *<li>  7,488 KHz:  One count = 0.1335 usec. Max duration =   8.752 msec. ({@link TimerCounterBits#TC_CLKS_MCK8})
+ *<li>  1,872 KHz:  One count = 0.5342 usec. Max duration =  35.009 msec. ({@link TimerCounterBits#TC_CLKS_MCK32})
+ *<li>    468 KHz:  One count = 2.1368 usec. Max duration = 140.035 msec. ({@link TimerCounterBits#TC_CLKS_MCK128})
+ *<li>     32.768 KHz:  One count = 30.5176 usec. Max duration = 2,000 msec = 2 sec. ({@link TimerCounterBits#TC_CLKS_SLCK})
  *</ul>
+ *</ul>
+ *<p>
+ * To get the master clock rate on a particular SPOT call:
+ *<pre>    Spot.getInstance().getMclkFrequency()</pre>
  *<p>
  * To use the Timer to measure an interval use Capture Mode, enable the clock to start it counting, 
  * and at the end of the interval just read the counter value:
@@ -67,7 +82,7 @@ package com.sun.spot.peripheral;
  *    timer.enableAndReset(); 
  *    ... interval to measure ...
  *    int cntr = timer.counter();
- *    double interval = cntr * 0.5342;  // time in microseconds
+ *    double interval = cntr * 0.5342;  // time in microseconds (rev6 SPOT)
  * </pre>
  *</code>
  * To generate periodic interrupts modify the above code to set the RC Register to the number of counts
@@ -75,7 +90,7 @@ package com.sun.spot.peripheral;
  *<code>
  * <pre>
  *    IAT91_TC timer = Spot.getInstance().getAT91_TC(0);
- *    int cnt = (int)(25000 / 0.5342);  // number of clock counts for 25 milliseconds
+ *    int cnt = (int)(25000 / 0.5342);  // number of clock counts for 25 milliseconds (rev6 SPOT)
  *    timer.configure(TC_CAPT | TC_CPCTRG | TC_CLKS_MCK32);
  *    timer.setRegC(cnt);
  *    timer.enableAndReset();

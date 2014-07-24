@@ -98,6 +98,8 @@ public class SocketProtocolOutputStream extends OutputStream implements SpotSock
      * Flush the stream. All buffered data will be sent.
      */
     public void flush() throws IOException {
+        out.write(ESCAPE_CHAR);
+        out.write(FLUSH);
         out.flush();
     }
     

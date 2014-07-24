@@ -1,5 +1,6 @@
 /*
  * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2010 Oracle. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -17,9 +18,9 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA
  * 
- * Please contact Sun Microsystems, Inc., 16 Network Circle, Menlo
- * Park, CA 94025 or visit www.sun.com if you need additional
- * information or have any questions.
+ * Please contact Oracle, 16 Network Circle, Menlo Park, CA 94025 or
+ * visit www.oracle.com if you need additional information or have
+ * any questions.
  */
 
 package com.sun.spot.peripheral.radio;
@@ -49,10 +50,20 @@ class HistoryEvent {
 		Utils.log("Time=" + time + " Size=" + size + " FCSok=" + fcsOk + " Rejected=" + rejected);
 		Utils.log("FIFORemainingOnEntry=" + fifoRemainingOnEntry + " Discarded=" + discarded + " Flushed=" + flushed);
 		Utils.log("OflowDetected=" + oflowDetected + " OflowOnEntry=" + oflowOnEntry);
-		Utils.log("FcfFromC=" + fcfFromC + " FcfFromRP=" + fcfFromRP + " fsmState=" + fsmState);
+		Utils.log("FcfFromC=" + fcfFromC + " FcfFromRP=" + Integer.toHexString(fcfFromRP) + " fsmState=" + fsmState);
 		Utils.log("fifoOnEntry=" + fifoOnEntry + " fifopOnEntry=" + fifopOnEntry);
 		Utils.log("fifoAfterSPI=" + fifoAfterSPI + " fifopAfterSPI=" + fifopAfterSPI);
-		Utils.log(Utils.stringify(contents));
+        StringBuffer result = new StringBuffer(size * 6);
+		for (int i=0; i<=size; i++) {
+			result.append("[");
+			String hexString = Integer.toHexString(contents[i] & 0xFF);
+			if (hexString.length() == 1) {
+				result.append('0');
+			}
+			result.append(hexString);
+			result.append("]");
+		}
+		Utils.log(result.toString());
 	}
 
 	void setRejected(boolean result) {

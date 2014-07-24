@@ -1,5 +1,6 @@
 /*
  * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2010 Oracle. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  *
  * This code is free software; you can redistribute it and/or modify
@@ -17,9 +18,9 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA
  *
- * Please contact Sun Microsystems, Inc., 16 Network Circle, Menlo
- * Park, CA 94025 or visit www.sun.com if you need additional
- * information or have any questions.
+ * Please contact Oracle, 16 Network Circle, Menlo Park, CA 94025 or
+ * visit www.oracle.com if you need additional information or have
+ * any questions.
  */
 
 package com.sun.spot.peripheral.radio.mhrp.lqrp;
@@ -44,6 +45,8 @@ import com.sun.spot.peripheral.radio.routing.RouteTable;
 import com.sun.spot.peripheral.radio.routing.RoutingPolicyManager;
 import com.sun.spot.peripheral.radio.routing.interfaces.IRoutingManager;
 import com.sun.spot.peripheral.radio.routing.interfaces.RouteEventClient;
+import com.sun.spot.resources.Resources;
+import com.sun.spot.service.BasicService;
 import com.sun.spot.service.IService;
 import com.sun.spot.util.Debug;
 import java.util.Enumeration;
@@ -53,9 +56,9 @@ import java.util.Enumeration;
  * @author Allen Ajit George, modification by Pradip De and Pete St. Pierre
  * @version 0.1
  */
-public class LQRPManager implements IRoutingManager {
+public class LQRPManager extends BasicService implements IRoutingManager {
 
-    private static String name = "LQRPManager";
+    private String name = "LQRPManager";
     private Sender sender;
     private Receiver receiver;
     private RoutingTable routingTable;
@@ -88,7 +91,12 @@ public class LQRPManager implements IRoutingManager {
      */
     public static synchronized LQRPManager getInstance() {
         if (instance == null) {
-            instance = new LQRPManager();
+            instance = (LQRPManager) Resources.lookup(LQRPManager.class);
+            if (instance == null) {
+                instance = new LQRPManager();
+                instance.addTag("service=" + instance.getServiceName());
+                Resources.add(instance);
+            }
         }
 
         return instance;
@@ -369,7 +377,6 @@ public class LQRPManager implements IRoutingManager {
             requestTable.stop();
             routingTable.stop();
             lp.deregisterProtocol(Constants.LQRP_PROTOCOL_NUMBER);
-            RadioPacketDispatcher.getInstance().removePacketQualityListener((IPacketQualityListener) linkMonitor);
 
             state = IService.STOPPED;
         }
@@ -402,7 +409,6 @@ public class LQRPManager implements IRoutingManager {
             RadioFactory.setAsDaemonThread(receiver);
             sender.start();
             receiver.start();
-            RadioPacketDispatcher.getInstance().addPacketQualityListener((IPacketQualityListener) linkMonitor);
             linkMonitor.setSender(sender);
 
             state = IService.RUNNING;
@@ -473,5 +479,15 @@ public class LQRPManager implements IRoutingManager {
      */
     public boolean getEnabled() {
         return false;
+    }
+
+    /**
+     * Returns the "Network Diameter" of this mesh network. 
+     *
+     *
+     * @return the maximum number of hops across this mesh network
+     */
+    public int getMaximumHops() {
+        return Constants.NET_DIAMETER;
     }
 }

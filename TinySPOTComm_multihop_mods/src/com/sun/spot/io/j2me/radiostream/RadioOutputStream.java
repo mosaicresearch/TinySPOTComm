@@ -88,7 +88,10 @@ public class RadioOutputStream extends OutputStream implements IRadioControl {
 	/* (non-Javadoc)
 	 * @see java.io.OutputStream#write(int)
 	 */
-	public synchronized void write(int arg0) throws NoAckException, ChannelBusyException, NoRouteException, NoMeshLayerAckException {
+	public synchronized void write(int arg0) throws NoAckException, ChannelBusyException, NoRouteException, NoMeshLayerAckException, IOException {
+	    if (closed) {
+	        throw new IOException("Cannot write to closed stream");
+	    }
 		payload[payloadIndex++] = (byte)arg0;
 		if (payloadIndex == flushThreshold) {
 			sendPayload();
@@ -96,6 +99,9 @@ public class RadioOutputStream extends OutputStream implements IRadioControl {
 	}
 	
 	public synchronized void flush() throws NoAckException, ChannelBusyException, NoRouteException, NoMeshLayerAckException {
+	    if (closed) {
+	        return;
+	    }
 		if (payloadIndex > IRadiostreamProtocolManager.DATA_OFFSET) {
 			sendPayload();
 		}

@@ -30,13 +30,8 @@ import java.io.IOException;
 import java.io.OutputStream;
 
 /**
- * IOTACommandHelper
- * 
- * Each {@link IOTACommand} is passed an instance of this interface at execution
+ * Each {@link IOTACommand} is passed an instance of the IOTACommandHelper interface at execution
  * to help it communicate with the remote SpotClient.
- * 
- * 
- *
  */
 public interface IOTACommandHelper {
 	/**

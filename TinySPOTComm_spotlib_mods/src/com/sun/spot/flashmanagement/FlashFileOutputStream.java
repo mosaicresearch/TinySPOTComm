@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2007-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -64,6 +64,7 @@ public class FlashFileOutputStream extends OutputStream {
 	private FlashFileDescriptor fileDescriptor;
 	private int numOfBytesInFile;
 	private int numOfBytesInBuffer;
+    private boolean justFlushed = false;
 	private FlashFile file = null;
 
 	/**
@@ -128,6 +129,7 @@ public class FlashFileOutputStream extends OutputStream {
 		if (numOfBytesInFile == fileDescriptor.getAllocatedSpace()) {
 			throw new IOException("File " + fileDescriptor.getName() + " is full");
 		}
+        justFlushed = false;
 		buffer[numOfBytesInBuffer++] = (byte)b;
 		if (numOfBytesInBuffer == buffer.length) {
 			// buffer is full
@@ -140,6 +142,7 @@ public class FlashFileOutputStream extends OutputStream {
 	 * @see java.io.OutputStream#flush()
 	 */
 	public void flush() throws IOException {
+        if (numOfBytesInBuffer <= 1 && justFlushed) return;
 		int numOfBytesInBufferOnEntry = numOfBytesInBuffer;
 		writeOutBuffer();
 		// numOfBytesInBuffer is now 0
@@ -152,6 +155,7 @@ public class FlashFileOutputStream extends OutputStream {
 		if (file != null) {
 			file.commit();
 		}
+        justFlushed = true;
 	}
 	
 	/**

@@ -29,6 +29,9 @@ import com.sun.spot.interisolate.VoidReplyEnvelope;
 import com.sun.spot.peripheral.radio.ConnectionID;
 import com.sun.spot.peripheral.radio.IRadioProtocolManager;
 
+/**
+ * @deprecated No longer needed: all Isolates now use a global radio resource.
+ */
 class CloseConnectionCommand extends RadioRequestEnvelope {
 	private ConnectionID cid;
 	

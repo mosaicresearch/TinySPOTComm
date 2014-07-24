@@ -24,21 +24,18 @@
 
 package com.sun.spot.service;
 
-import com.sun.spot.globals.SpotGlobals;
-import java.util.Vector;
+import com.sun.spot.resources.Resources;
 
 /**
  * Global service registry for all SPOT-related services.
+ * Replaced by new com.sun.spot.resources.Resources class.
  *
  * @author Ron Goldman
+ * @deprecated use the Resources class instead
  */
 public class ServiceRegistry {
 
-    private static final int SPOT_GLOBAL_SERVICE_REGISTRY = 1001;
-
     private static ServiceRegistry instance = null;
-
-    private Vector services = new Vector();
 
     /**
      * Get the globally unique service registry instance.
@@ -47,15 +44,7 @@ public class ServiceRegistry {
      */
     public static ServiceRegistry getInstance() {
         if (instance == null) {
-            synchronized (SpotGlobals.getMutex()) {
-                Object sr = SpotGlobals.getGlobal(SPOT_GLOBAL_SERVICE_REGISTRY);
-                if (sr != null) {
-                    instance = (ServiceRegistry) sr;
-                } else {
-                    instance = new ServiceRegistry();
-                    SpotGlobals.setGlobal(SPOT_GLOBAL_SERVICE_REGISTRY, instance);
-                }
-            }
+            instance = new ServiceRegistry();
         }
         return instance;
     }
@@ -69,9 +58,7 @@ public class ServiceRegistry {
      * @param serviceInstance the new service instance to add
      */
     public void add(IService serviceInstance) {
-        if (!services.contains(serviceInstance)) {
-            services.addElement(serviceInstance);
-        }
+        Resources.add(serviceInstance);
     }
 
     /**
@@ -80,15 +67,7 @@ public class ServiceRegistry {
      * @param serviceInstance the service instance to remove
      */
     public void remove(IService serviceInstance) {
-        services.removeElement(serviceInstance);
-    }
-
-    private IService[] toArray(Vector v) {
-        IService[] a = new IService[v.size()];
-        for (int i = 0; i < v.size(); i++) {
-            a[i] = (IService)v.elementAt(i);
-        }
-        return a;
+        Resources.remove(serviceInstance);
     }
 
     /**
@@ -98,13 +77,7 @@ public class ServiceRegistry {
      * @return an array of all matching services
      */
     public IService[] lookupAll(Class serviceInterface) {
-        Vector results = new Vector();
-        for (int i = 0; i < services.size(); i++) {
-            if (serviceInterface.isInstance(services.elementAt(i))) {
-                results.addElement(services.elementAt(i));
-            }
-        }
-        return toArray(results);
+        return (IService[])Resources.lookupAll(serviceInterface);
     }
 
     /**
@@ -116,13 +89,7 @@ public class ServiceRegistry {
      * @return a matching service
      */
     public IService lookup(Class serviceInterface) {
-        for (int i = 0; i < services.size(); i++) {
-            IService s = (IService)services.elementAt(i);
-            if (serviceInterface.isInstance(s)) {
-                return s;
-            }
-        }
-        return null;
+        return (IService)Resources.lookup(serviceInterface);
     }
 
     /**
@@ -133,14 +100,7 @@ public class ServiceRegistry {
      * @return an array of all matching services
      */
     public IService[] lookupAll(Class serviceInterface, String name) {
-        Vector results = new Vector();
-        for (int i = 0; i < services.size(); i++) {
-            IService s = (IService)services.elementAt(i);
-            if (serviceInterface.isInstance(s) && s.getServiceName().equals(name)) {
-                results.addElement(s);
-            }
-        }
-        return toArray(results);
+        return (IService[])Resources.lookupAll(serviceInterface, "service=" + name);
     }
 
     /**
@@ -153,13 +113,7 @@ public class ServiceRegistry {
      * @return a matching service
      */
     public IService lookup(Class serviceInterface, String name) {
-        for (int i = 0; i < services.size(); i++) {
-            IService s = (IService)services.elementAt(i);
-            if (serviceInterface.isInstance(s) && s.getServiceName().equals(name)) {
-                return s;
-            }
-        }
-        return null;
+        return (IService)Resources.lookup(serviceInterface, "service=" + name);
     }
 
 }

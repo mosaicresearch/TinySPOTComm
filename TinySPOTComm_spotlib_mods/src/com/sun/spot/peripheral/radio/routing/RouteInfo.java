@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -74,16 +74,16 @@ public class RouteInfo {
      * @return the string representation of this destination, next hop, hop count tuple.
      */
     public String toString() {
-    	return new IEEEAddress(destination).asDottedHex()+":"+
-    		new IEEEAddress(nextHop).asDottedHex()+":"+
-    		hopCount;
+    	return IEEEAddress.toDottedHex(destination) + ":" +
+               IEEEAddress.toDottedHex(nextHop) + ":" +
+    		   hopCount;
     }
     
     public static RouteInfo fromString(String s) {
         String[] parts = Utils.split(s, ':');
-        return new RouteInfo(new IEEEAddress(parts[0]).asLong(),
-                        new IEEEAddress(parts[1]).asLong(),
-                        Integer.parseInt(parts[2]));
+        return new RouteInfo(IEEEAddress.toLong(parts[0]),
+                             IEEEAddress.toLong(parts[1]),
+                             Integer.parseInt(parts[2]));
     }
   
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2007-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -28,9 +28,13 @@ import java.util.Enumeration;
 import java.util.Hashtable;
 
 import com.sun.spot.peripheral.SpotFatalException;
+import com.sun.spot.resources.Resource;
 import com.sun.squawk.Isolate;
 
-public class ResourceRegistryChild implements IResourceRegistry {
+/**
+ * @deprecated  As of v6.0 (Yellow), replaced by {@link com.sun.spot.resources}
+ */
+public class ResourceRegistryChild extends Resource implements IResourceRegistry {
 
 	private int isolateId;
 	private IResourceRegistryMaster masterRegistry;

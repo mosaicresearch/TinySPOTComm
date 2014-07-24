@@ -1,5 +1,6 @@
 /*
  * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2010 Oracle. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -17,9 +18,9 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA
  * 
- * Please contact Sun Microsystems, Inc., 16 Network Circle, Menlo
- * Park, CA 94025 or visit www.sun.com if you need additional
- * information or have any questions.
+ * Please contact Oracle, 16 Network Circle, Menlo Park, CA 94025 or
+ * visit www.oracle.com if you need additional information or have
+ * any questions.
  */
 
 package com.sun.spot.peripheral.radio.mhrp.lqrp.request;
@@ -34,13 +35,15 @@ import com.sun.spot.peripheral.radio.mhrp.lqrp.Constants;
 import com.sun.spot.peripheral.radio.mhrp.lqrp.messages.RREP;
 import com.sun.spot.peripheral.radio.mhrp.lqrp.messages.RREQ;
 import com.sun.spot.peripheral.radio.routing.interfaces.RouteEventClient;
+import com.sun.spot.resources.Resource;
+import com.sun.spot.resources.Resources;
 import java.util.Random;
 
 /**
  * @author Allen Ajit George
  * @version 0.1
  */
-public class RequestTable {
+public class RequestTable extends Resource {
     
     private final Hashtable table;
     private final SortedList timeoutList;
@@ -80,7 +83,11 @@ public class RequestTable {
      */
     public synchronized static RequestTable getInstance() {
         if (instance == null) {
-            instance = new RequestTable();
+            instance = (RequestTable) Resources.lookup(RequestTable.class);
+            if (instance == null) {
+                instance = new RequestTable();
+                Resources.add(instance);
+            }
         }
         
         return instance;

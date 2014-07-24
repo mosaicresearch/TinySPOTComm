@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -21,7 +21,6 @@
  * Park, CA 94025 or visit www.sun.com if you need additional
  * information or have any questions.
  */
-
 package com.sun.spot.peripheral.radio;
 
 import java.util.Enumeration;
@@ -47,10 +46,10 @@ import com.sun.spot.util.Debug;
 import com.sun.spot.util.Queue;
 import com.sun.spot.peripheral.radio.routing.RoutingPolicyManager;
 import com.sun.spot.peripheral.radio.routing.interfaces.IRoutingPolicyManager;
+import com.sun.spot.resources.Resources;
 import com.sun.spot.service.BasicService;
-import com.sun.spot.service.ServiceRegistry;
 import com.sun.spot.util.Utils;
-
+import java.util.Date;
 
 /**
  * Packet processing layer based on the low pan draft. Provides link layer
@@ -59,7 +58,7 @@ import com.sun.spot.util.Utils;
  * @version 1.0
  */
 public class LowPan extends BasicService implements ILowPan, RouteEventClient {
-    
+
     private final Object routeLock = new Integer(0);
     private static final int MAX_BROADCAST_DELTA = 30; // used for sequence checking
     private long ourAddress;
@@ -70,22 +69,19 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
     private Random randomGen;
     private Queue bCastQueue;
     private BroadcastDispatcherThread bCastDispatcher;
-    private static IntHashtable protocolTable;
-    private static IntHashtable protocolFamilyTable;
-    private static Hashtable availRoutes;
+    private IntHashtable protocolTable;
+    private IntHashtable protocolFamilyTable;
+    private Hashtable availRoutes;
+    private IRoutingManager routingManager;
+    private IRadioPacketDispatcher packetDispatcher;
+    private Hashtable reassemblyBuffers;
+    private Hashtable bCastSeqNos;
+    private Timer reassemblyTimer;
+    private IService netmgr;
+    private IRoutingPolicyManager rpm;
     private static ILowPan lowPan;
-    private static IRoutingManager routingManager;
-    private static IRadioPacketDispatcher packetDispatcher;
-    private static Hashtable reassemblyBuffers;
-    private static Hashtable bCastSeqNos;
-    private static Timer reassemblyTimer;
-    private static IService netmgr;
-    private static IRoutingPolicyManager rpm;
-
     // For managment
-    private static LowPanStats lpStats;
-    
-    
+    private LowPanStats lpStats;
     private static final long REASSEMBLY_EXPIRATION_TIME = 15000;
     /**
      * Limit the number of packets on this queue to avoid out of memory errors when there's
@@ -96,7 +92,6 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
      * get broadcasted more than ten seconds late anyway and would be of doubtful value.
      */
     private static final int MAX_BROADCAST_QUEUE_LENGTH = 200;
-
     private static final int DEFAULT_PACKET_DELAY = 10;
     private static final int DEFAULT_FORWARDING_DELAY = 5;
     private static final int DEFAULT_PER_HOP_DELAY = 10;
@@ -107,10 +102,11 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
      */
     public static synchronized ILowPan getInstance() {
         if (lowPan == null) {
-          lowPan = (ILowPan)ServiceRegistry.getInstance().lookup(LowPan.class);
-          if (lowPan == null) {
-              lowPan = new LowPan(RadioFactory.getRadioPolicyManager().getIEEEAddress(), LQRPManager.getInstance(), RadioPacketDispatcher.getInstance());
-              ServiceRegistry.getInstance().add((LowPan)lowPan);
+            lowPan = (ILowPan) Resources.lookup(LowPan.class);
+            if (lowPan == null) {
+                lowPan = new LowPan(RadioFactory.getRadioPolicyManager().getIEEEAddress(), LQRPManager.getInstance(), RadioPacketDispatcher.getInstance());
+                lowPan.addTag("service=" + lowPan.getServiceName());
+                Resources.add(lowPan);
             }
         }
         return lowPan;
@@ -119,7 +115,7 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
     public String getServiceName() {
         return "LowPan";
     }
-    
+
     /**
      * protected constructor for the instantiation of the singleton
      * @param ourAddress MAC address we generate packets from/answer for
@@ -132,46 +128,47 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
         packetDispatcher = radioPacketDispatcher;
         lpStats = new LowPanStats();
         randomGen = new Random();
-        
+
         // Protocol dispatching functionality
         protocolTable = new IntHashtable();
         protocolFamilyTable = new IntHashtable();
-        
+
         // 6lowpan reassembly support
         datagramTag = 0;
         reassemblyBuffers = new Hashtable();
         reassemblyTimer = new Timer();
-        
+
         // Broadcast support
         bCastSeqNos = new Hashtable();
         broadcastSeqNo = randomGen.nextInt(256); // Initialize with random start value
         bCastQueue = new Queue();
         bCastDispatcher = new BroadcastDispatcherThread(this);
         bCastDispatcher.start();
-        
+
         // initialize routing policy manager
         rpm = RoutingPolicyManager.getInstance();
-        
+
         // initialize routing manager
         routeListener = new Vector();
         dataListener = new Vector();
         availRoutes = new Hashtable();
         setRoutingManager(routingManager);
-        
+
         // Must be the last thing we do
         packetDispatcher.initialize(this);
     }
-    
+
     /**
      * Replace the routing manager with a different implemenation
      * @param newRoutingManager a new routing manager
      * @return the old routing manager
      */
-    
     public IRoutingManager setRoutingManager(IRoutingManager newRoutingManager) {
-        
+
         IRoutingManager rm = this.routingManager;  // save this so we can return it
-        if (rm != null) rm.stop();
+        if (rm != null) {
+            rm.stop();
+        }
         if (newRoutingManager != null) {
             newRoutingManager.initialize(ourAddress, this);
             newRoutingManager.start();
@@ -179,7 +176,7 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
         }
         return rm;
     }
-    
+
     /**
      * Register a protocol manager to send and receive packets
      * @param protocolFamily protocol family this protocol is in (ie IPv6, SunSPOT, etc)
@@ -188,22 +185,23 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
     public void registerProtocolFamily(byte protocolFamily, IProtocolManager protocolMan) {
         if (protocolFamily == LowPanHeader.DISPATCH_SPOT) {
             throw new IllegalArgumentException("Cannot override SPOT protocol family ");
-            
+
         } else { // It's a non-spot protocol
             if (getProtocolFamilyFor(protocolFamily) != null) {
                 throw new IllegalArgumentException("Cannot add multiple protocol " +
                         "managers for family: " + protocolFamily);
             }
-            
+
             synchronized (protocolFamilyTable) {
                 protocolFamilyTable.put(protocolFamily, protocolMan);
                 lpStats.protocolFamilyCount++;
             }
             //Debug.print("registerProtocolFamily: added protocol family " + protocolNum, 3);
         }
-        
-        
+
+
     }
+
     /**
      * Register a protocol manager to send and receive packets
      * @param protocolNum number of protocol to be handled
@@ -214,14 +212,14 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
             throw new IllegalArgumentException("Cannot add multiple protocol " +
                     "managers for " + protocolNum);
         }
-        
+
         synchronized (protocolTable) {
             protocolTable.put(protocolNum, protocolMan);
             lpStats.protocolCount++;
         }
         //Debug.print("registerProtocol: added protocol " + protocolNum, 3);
     }
-    
+
     /**
      * Deregister a protocol.
      * @param protocolNum identifier for the protocol
@@ -237,7 +235,7 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
             }
         }
     }
-    
+
     /**
      * Deregister a protocol family.
      * @param protocolFamily identifier for the protocol
@@ -253,6 +251,7 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
             }
         }
     }
+
     /**
      * Register to be notified as soon as the LowPan module forwards data.
      * @param listener the class that wants to be called back
@@ -260,7 +259,7 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
     public void registerDataEventListener(IDataEventListener listener) {
         addDataEventListener(listener);
     }
-    
+
     /**
      * Undo a previous call of registerDataEventListener()
      * @param listener the class that wants to be deregistered
@@ -295,7 +294,7 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
     public void registerRouteEventListener(IRouteEventListener listener) {
         addRouteEventListener(listener);
     }
-    
+
     /**
      * Undo a previous call of registerRouteEventListener()
      * @param listener the class that wants to be deregistered
@@ -366,7 +365,7 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
             routeLock.notifyAll();
         }
     }
-    
+
     /**
      * This method is called by the packet dispatcher this low pan layer is
      * registered with. It decides which instance this packet should be passed
@@ -377,6 +376,8 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
      * @throws com.sun.spot.peripheral.NoRouteException a mesh route could not be found to the next hop for the received packet
      */
     public synchronized void receive(RadioPacket packet) throws ChannelBusyException, NoRouteException {
+//        Date date = new Date(System.currentTimeMillis());
+//        System.out.println("[LowPan]" + date + ": Entered receive()");
         LowPanPacket lpp = new LowPanPacket(packet);
 //        System.out.println(packet.toString());
         if (lpp.isMeshed()) {
@@ -395,9 +396,9 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
                 }
             } else {
                 // Didn't have our Final Destination check broadcast
-                
+
                 if (!lpp.isBCast() && !rpm.isEndNode()) {
-                    
+
                     // Not a broadcast, send it along
                     forwardMeshPacket(lpp);
                 } else { // is a meshed broadcast
@@ -411,7 +412,7 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
                         } else {
                             int dataStart = lpp.getLppPayloadOffset();
                             int dataLength = lpp.getPayloadSize();
-                            
+
                             if (dataLength < 0) {
                                 System.out.println("[LowPan] Received packet with apparently negative data length");
                                 System.out.println("RadioPacket: " + packet);
@@ -422,9 +423,11 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
                         } // end unfragged meshed broadcast
                         // Have not seen this one, so forward
                         if (!rpm.isEndNode()) {
-                            if (lpp.getHopsLeft() > 1) queueBroadcastPacket(lpp); // used to forward, now we Queue it -- pete
+                            if (lpp.getHopsLeft() > 1) {
+                                queueBroadcastPacket(lpp); // used to forward, now we Queue it -- pete
+                            }
                         }
-                        
+
                     } else { // end valid meshed broadcast
                         lpStats.droppedBroadcasts++; // it was either ours, or an invalid seqNo
                     }
@@ -439,7 +442,7 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
             } else {
                 int dataStart = lpp.getLppPayloadOffset();
                 int dataLength = lpp.getPayloadSize();
-                
+
                 if (dataLength < 0) {
                     System.out.println("[LowPan] Received packet with apparently negative data length");
                     System.out.println("RadioPacket: " + packet);
@@ -449,34 +452,34 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
             }
         }
     }
-    
+
     private boolean validateBroadcastForForwarding(LowPanPacket lpp) throws ChannelBusyException, NoRouteException {
-        Integer lastSeqNo = (Integer)bCastSeqNos.get(new Long(lpp.getOriginatorAddress()));
-        if (lastSeqNo == null)  { // never seen a Bcast from this address
-            bCastSeqNos.put(new Long(lpp.getOriginatorAddress()), new Integer((int)(lpp.getBCastSeqNo() & 0xff)));
+        Integer lastSeqNo = (Integer) bCastSeqNos.get(new Long(lpp.getOriginatorAddress()));
+        if (lastSeqNo == null) { // never seen a Bcast from this address
+            bCastSeqNos.put(new Long(lpp.getOriginatorAddress()), new Integer((int) (lpp.getBCastSeqNo() & 0xff)));
             return true;
         }
         int limit = lastSeqNo.intValue();
         int current = lpp.getBCastSeqNo();
         // We either increased or decreased
         if (current <= limit) { // new packet has lower value
-            if (current > (limit-MAX_BROADCAST_DELTA)) { // within window, drop it
+            if (current > (limit - MAX_BROADCAST_DELTA)) { // within window, drop it
 //                Debug.print("[lowpan] Squelch broadcast, Origin: " + IEEEAddress.toDottedHex(lpp.getOriginatorAddress()) +
 //                        ", Sequence: " + current + " Previous: " + limit + ", delta: " + (limit-current));
                 return false;
             }
         } else { // New value is larger, a long as it didn't wrap, we're fine
-            if ((limit-MAX_BROADCAST_DELTA+255) < current) {
+            if ((limit - MAX_BROADCAST_DELTA + 255) < current) {
 //                Debug.print("[lowpan] Squelch broadcast, Origin: " + IEEEAddress.toDottedHex(lpp.getOriginatorAddress()) +
 //                        ", Sequence: " + current + " Previous: " + limit + ", delta: " + (limit-current));
                 return false;
             }
         }
         // far enough out of window it may be a new broadcast
-        bCastSeqNos.put(new Long(lpp.getOriginatorAddress()), new Integer((int)(lpp.getBCastSeqNo() & 0xff)));
+        bCastSeqNos.put(new Long(lpp.getOriginatorAddress()), new Integer((int) (lpp.getBCastSeqNo() & 0xff)));
         return true;
     }
-    
+
     /**
      * returns a handle to the routing manager object
      * @return An object that implements the IRoutingManager interface
@@ -484,7 +487,7 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
     public IRoutingManager getRoutingManager() {
         return routingManager;
     }
-    
+
     /**
      * returns a handle to the netmanagement  object
      * @return An object that implements the IService interface
@@ -492,7 +495,7 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
     public IService getNetManager() {
         return netmgr;
     }
-    
+
     /**
      * returns a handle to the RoutingPolicyManager  object
      * @return An object that implements the IRoutingManager interface
@@ -500,7 +503,7 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
     public IRoutingPolicyManager getRoutingPolicyManager() {
         return rpm;
     }
-    
+
     public long send(byte protocolFamily, byte protocolNum, long toAddress, byte[] buffer,
             int startOffset, int endOffset)
             throws ChannelBusyException, NoRouteException {
@@ -509,14 +512,14 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
                 lpp);
         return lpp.getRadioPacket().getTimestamp();
     }
-    
+
     public boolean send(byte protocolFamily, byte protocolNum, long toAddress, byte[] buffer,
             int startOffset, int endOffset, boolean failIfNotSingleHop)
             throws ChannelBusyException, NoRouteException {
         return sendPrim(protocolFamily, protocolNum, toAddress, buffer, startOffset, endOffset,
                 failIfNotSingleHop, new LowPanPacket(LowPanPacket.DATA_PACKET));
     }
-    
+
     /**
      * Send a byte buffer on a given protocol. The caller simply supplied a byte
      * payload
@@ -528,7 +531,7 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
         IProtocolManager protocolManager;
         LowPanHeader lph = new LowPanHeader();
         lph.setProtocolInfo(protocolFamily, protocolNum);
-        
+
 //        System.out.println("[sendPrim] Sending to " + IEEEAddress.toDottedHex(toAddress));
 //        System.out.println("[sendPrim] failIfNotSingleHop: " + failIfNotSingleHop);
         if (protocolFamily == LowPanHeader.DISPATCH_SPOT) {
@@ -540,18 +543,18 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
             throw new IllegalArgumentException("Unknown protocol " + protocolNum);
         }
         boolean result = true;
-        
+
         RouteInfo info = routingManager.getRouteInfo(toAddress);
 //		System.out.println("doFSend: meshing enabled");
 //		System.out.println("doFSend: next hop is " +
 //                        IEEEAddress.toDottedHex(info.nextHop));
-        
+
         if (info.nextHop == Constants.INVALID_NEXT_HOP) {
             info = findNextHop(toAddress);
         }
-        
+
         lpp.getRadioPacket().setDestinationAddress(info.nextHop);
-        
+
         //how much payload data can be filled into one radio packet
         byte freeSpace = RadioPacket.MIN_PAYLOAD_LENGTH - ILowPan.MAC_PAYLOAD_OFFSET;
         freeSpace -= LowPanHeader.MAX_PROTOCOL_HEADER_LENGTH;
@@ -560,7 +563,7 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
         }
         for (int i = 0; i < 3; i++) {
             try {
-                if (freeSpace>=(endOffset-startOffset)){
+                if (freeSpace >= (endOffset - startOffset)) {
                     if (info.hopCount > 1 && failIfNotSingleHop) {
                         result = false;
                         return result;
@@ -596,11 +599,9 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
             throw new NoRouteException("[LowPan] received a NoAckException on route to " +
                     IEEEAddress.toDottedHex(toAddress) + " through " + IEEEAddress.toDottedHex(info.nextHop));
         }
-        send(protocolFamily, protocolNum, toAddress, buffer, startOffset, endOffset,
-                failIfNotSingleHop);
-        return result;
+        return send(protocolFamily, protocolNum, toAddress, buffer, startOffset, endOffset, failIfNotSingleHop);
     }
-    
+
     /**
      * Sends a packet over a single hop.  The buffer must fit within a single 802.15.4 packet.
      * No 6lowpan headers are used.
@@ -614,25 +615,29 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
      */
     public void sendWithoutMeshingOrFragmentation(byte protocolNum, long toAddress,
             byte[] buffer, int startOffset, int endOffset) throws NoAckException, ChannelBusyException {
-        LowPanPacket lpp = new LowPanPacket(LowPanPacket.DATA_PACKET);
+        LowPanPacket lpp = new LowPanPacket(toAddress == 0xffff ? LowPanPacket.BROADCAST_PACKET : LowPanPacket.DATA_PACKET);
         LowPanHeader lph = new LowPanHeader();
         lph.setOutgoingDestinationAddress(toAddress);
         lph.setProtocolInfo(LowPanHeader.DISPATCH_SPOT, protocolNum);
         lph.setMeshed(false);
         lph.setBCast(false);
-        lph.setFragged(false); lph.setOutgoingFragTag(LowPanHeader.UNFRAGMENTED);
-        
+        lph.setFragged(false);
+        lph.setOutgoingFragTag(LowPanHeader.UNFRAGMENTED);
+
         lpp.writeHeaderAndPayload(lph, buffer, startOffset, endOffset);
-        lpp.getRadioPacket().setDestinationAddress(toAddress);
-        if (toAddress == 0xffff) lpStats.broadcastsSent++;
-        else lpStats.unicastsSent++;
+        if (toAddress == 0xffff) {
+            lpStats.broadcastsSent++;
+        } else {
+            lpp.getRadioPacket().setDestinationAddress(toAddress);
+            lpStats.unicastsSent++;
+        }
         lpStats.nonMeshPacketsSent++;
         lpStats.packetsSent++;
         packetDispatcher.sendPacket(lpp.getRadioPacket());
         Utils.sleep(DEFAULT_PACKET_DELAY);  // Delay between packets to allow receivers to keep up
-                                            // & to prevent collision with forwarding of fragment
+        // & to prevent collision with forwarding of fragment
     }
-    
+
     /**
      * send a LowPan packet using 802.15.4 broadcast packets
      * @param protocolNum The SPOT prootocol number of the packet
@@ -645,11 +650,11 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
      */
     public long sendBroadcast(byte protocolNum, byte[] buffer, int startOffset,
             int endOffset, int hops) throws ChannelBusyException {
-        
+
         return sendBroadcast(LowPanHeader.DISPATCH_SPOT, protocolNum, buffer,
                 startOffset, endOffset, hops);
     }
-    
+
     /**
      * send a LowPan packet using 802.15.4 broadcast packets
      * @param protocolFamily The DISPATCH value for this protocol family
@@ -663,7 +668,7 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
      */
     public long sendBroadcast(byte protocolFamily, byte protocolNum, byte[] buffer, int startOffset,
             int endOffset, int hops) throws ChannelBusyException {
-        
+
         LowPanPacket lpp = new LowPanPacket(LowPanPacket.BROADCAST_PACKET);
         LowPanHeader lph = new LowPanHeader();
         lph.setProtocolInfo(protocolFamily, protocolNum);
@@ -678,19 +683,19 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
             lph.setOutgoingOriginatorAddress(ourAddress);
             lph.setOutgoingDestinationAddress(dest);
             lph.setBCast(true);
-            
+
             // Free space gets smaller
             freeSpace -= (LowPanHeader.MAX_MESH_HEADER_LENGTH + LowPanHeader.BROADCAST_HEADER_LENGTH);
-        } else  {
+        } else {
             lph.setMeshed(false);
         }
         // No mesh header is needed
         //Debug.print("doFSend: broadcasting packet", 5);
-        
+
         try {
             //if we have enough space in a single packet as we need no
             //meshheader, we can just send it
-            if (freeSpace>=(endOffset-startOffset)){
+            if (freeSpace >= (endOffset - startOffset)) {
                 sendInOnePacket(null, protocolNum, buffer, startOffset,
                         endOffset, lpp, lph);
                 lpStats.broadcastsSent++;
@@ -708,15 +713,16 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
         }
         return lpp.getRadioPacket().getTimestamp();
     }
-    
+
     private void setSequenceNumber(LowPanHeader lph) {
         if (lph.isBCast()) {
-            lph.setOutgoingBCastSeqNo(broadcastSeqNo++); broadcastSeqNo %= 256;
+            lph.setOutgoingBCastSeqNo(broadcastSeqNo++);
+            broadcastSeqNo %= 256;
             // update table with our info so we don't repeat our packet when we see it
-            bCastSeqNos.put(new Long(ourAddress), new Integer(broadcastSeqNo-1));
+            bCastSeqNos.put(new Long(ourAddress), new Integer(broadcastSeqNo - 1));
         }
     }
-    
+
     private void sendInOnePacket(RouteInfo routeInfoOrNull,
             byte protocolNum,
             byte[] buffer,
@@ -726,40 +732,44 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
             LowPanHeader lph)
             throws ChannelBusyException, NoRouteException, NoAckException {
 //            System.out.println("[lowpan] Sending as one packet, proto: " +protocolNum);
-        
+
         int delay = DEFAULT_PACKET_DELAY;
         boolean isMeshing = (routeInfoOrNull != null) && (routeInfoOrNull.hopCount > 1);
 
         lph.setOutgoingFragType(LowPanHeader.UNFRAGMENTED);
-        
+
         // mesh header may already be set if this is a broadcast > 1 hop
-        if(isMeshing){
+        if (isMeshing) {
             lph.setMeshed(true);
             lph.setOutgoingHops(routeInfoOrNull.hopCount);
             lph.setOutgoingOriginatorAddress(ourAddress);
             lph.setOutgoingDestinationAddress(routeInfoOrNull.destination);
             delay += DEFAULT_FORWARDING_DELAY + (Math.min(3, routeInfoOrNull.hopCount) - 1) * DEFAULT_PER_HOP_DELAY;
         }
-        
+
         if (lph.isBCast()) {
             lpStats.meshBroadcastsSent++;
             setSequenceNumber(lph);
             delay += DEFAULT_FORWARDING_DELAY;
         } else if (lpp.getRadioPacket().getDestinationAddress() == 0xffff) {
-            delay += DEFAULT_FORWARDING_DELAY;;
+            delay += DEFAULT_FORWARDING_DELAY;
+            ;
         }
 //            System.out.println("[send1] Buf start: " + startOffset + " end: " + endOffset +
 //                   " size " + (endOffset - startOffset+1));
-        
+
         lpp.writeHeaderAndPayload(lph, buffer, startOffset, endOffset);
-        if (isMeshing || lph.isBCast()) lpStats.meshPacketsSent++;
-        else lpStats.nonMeshPacketsSent++;
+        if (isMeshing || lph.isBCast()) {
+            lpStats.meshPacketsSent++;
+        } else {
+            lpStats.nonMeshPacketsSent++;
+        }
         lpStats.packetsSent++;
         packetDispatcher.sendPacket(lpp.getRadioPacket());
         Utils.sleep(delay); // Delay between packets to allow receivers to keep up
-                            // & to prevent collision with forwarding of fragment
+        // & to prevent collision with forwarding of fragment
     }
-    
+
     // Note below:  For broadcast packets we must increment the sequence number in each packet
     //             Otherwise the source/SeqNo will match a previous packet and it will be
     //             discarded
@@ -770,7 +780,7 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
         int delay = DEFAULT_PACKET_DELAY;
         datagramTag++;
         boolean isMeshing = (routeInfoOrNull != null) && (routeInfoOrNull.hopCount > 1);
-        if(isMeshing){
+        if (isMeshing) {
             lph.setMeshed(true);
             lph.setOutgoingHops(routeInfoOrNull.hopCount);
             lph.setOutgoingOriginatorAddress(ourAddress);
@@ -779,60 +789,68 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
         } else if (lpp.getRadioPacket().getDestinationAddress() == 0xffff) {
             delay += DEFAULT_FORWARDING_DELAY;
         }
-        
+
         lph.setFragged(true);
         // according to 6lowpan draft, fragment in increments in steps of 8 octets
-        
-        freeSpace = (byte)(freeSpace - (freeSpace%8));
-        
+
+        freeSpace = (byte) (freeSpace - (freeSpace % 8));
+
         lph.setOutgoingFragTag(datagramTag);
-        lph.setOutgoingFragSize(endOffset-startOffset);
+        lph.setOutgoingFragSize(endOffset - startOffset);
         //Debug.print("doFSend: freeSpace = "+freeSpace, 5);
-        int numOfFragments = (endOffset-startOffset+freeSpace-1)/freeSpace;
-        for (int i = 0; i < numOfFragments-1; i++) {
+        int numOfFragments = (endOffset - startOffset + freeSpace - 1) / freeSpace;
+        for (int i = 0; i < numOfFragments - 1; i++) {
             //System.out.println("doFSend: preparing fragment "+i);
             if (i == 0) {
                 lph.setOutgoingFragType(LowPanHeader.FIRST_FRAGMENT);
-                
+
             } else {
                 lph.setOutgoingFragType(LowPanHeader.INTERIOR_FRAGMENT);
             }
-            int datagramOffset = i*freeSpace/8;
+            int datagramOffset = i * freeSpace / 8;
             lph.setOutgoingFragOffset(datagramOffset);
             if (lph.isBCast()) {
                 lpStats.meshBroadcastsSent++;
                 setSequenceNumber(lph);
             }
-            lpp.writeHeaderAndPayload(lph, buffer, datagramOffset*8,
-                    datagramOffset*8+freeSpace);
+            lpp.writeHeaderAndPayload(lph, buffer, datagramOffset * 8,
+                    datagramOffset * 8 + freeSpace);
             // System.out.println("doFSend: sending fragment "+i);
-            if (isMeshing || lph.isBCast()) lpStats.meshPacketsSent++; else lpStats.nonMeshPacketsSent++;
+            if (isMeshing || lph.isBCast()) {
+                lpStats.meshPacketsSent++;
+            } else {
+                lpStats.nonMeshPacketsSent++;
+            }
             lpStats.packetsSent++;
             packetDispatcher.sendPacket(lpp.getRadioPacket());
             Utils.sleep(delay); // Delay between packets to allow receivers to keep up
-                                // & to prevent collision with forwarding of fragment
+            // & to prevent collision with forwarding of fragment
         }
-        
+
         //sending the last fragment
         //Debug.print("doFSend: preparing last fragment", 5);
         //packet.setMACPayloadLength(RadioPacket.MIN_PAYLOAD_LENGTH);
         lph.setOutgoingFragType(LowPanHeader.LAST_FRAGMENT);
-        byte datagramOffset = (byte)((numOfFragments-1)*freeSpace/8);
+        byte datagramOffset = (byte) ((numOfFragments - 1) * freeSpace / 8);
         lph.setOutgoingFragOffset(datagramOffset);
         if (lph.isBCast()) {
             lpStats.meshBroadcastsSent++;
             setSequenceNumber(lph);
         }
-        lpp.writeHeaderAndPayload(lph, buffer, startOffset+((numOfFragments-1)*freeSpace),
+        lpp.writeHeaderAndPayload(lph, buffer, startOffset + ((numOfFragments - 1) * freeSpace),
                 endOffset);
-        
+
         // System.out.println("doFSend: sending last fragment");
-        if (isMeshing || lph.isBCast()) lpStats.meshPacketsSent++; else lpStats.nonMeshPacketsSent++;
+        if (isMeshing || lph.isBCast()) {
+            lpStats.meshPacketsSent++;
+        } else {
+            lpStats.nonMeshPacketsSent++;
+        }
         lpStats.packetsSent++;
         packetDispatcher.sendPacket(lpp.getRadioPacket());
         Utils.sleep(delay); // still need to prevent collision with forwarding of fragment
     }
-    
+
     /**
      * This method is called when the routing manager cannot provide a routing
      * info with a valid next hop for a certain destination address. It makes
@@ -842,19 +860,19 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
      * destination
      */
     private RouteInfo findNextHop(long destinationAddress)
-    throws NoRouteException {
-        
+            throws NoRouteException {
+
         RouteInfo info = null;
         Object uniqueKey = new Object();
-        
+
         //notify all registered listeners, that a route request is made
         if (!routeListener.isEmpty()) {
             Enumeration en = routeListener.elements();
-            while(en.hasMoreElements()){
-                ((IRouteEventListener)en.nextElement()).routeRequestMade(destinationAddress);
+            while (en.hasMoreElements()) {
+                ((IRouteEventListener) en.nextElement()).routeRequestMade(destinationAddress);
             }
         }
-        
+
         try {
             synchronized (routeLock) {
                 routingManager.findRoute(destinationAddress, this, uniqueKey);
@@ -862,16 +880,15 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
                     //corresponding notify is called in routeFound()
                     routeLock.wait();
                 }
-                
+
                 info = (RouteInfo) availRoutes.remove(uniqueKey);
                 if ((info.nextHop - Constants.INVALID_NEXT_HOP) == 0) {
                     //Debug.print("findNextHop: no next hop", 4);
-                    
+
                     if (!routeListener.isEmpty()) {
                         Enumeration en = routeListener.elements();
-                        while(en.hasMoreElements()){
-                            ((IRouteEventListener)en.nextElement())
-                            .routeResponseReceived(info.destination,
+                        while (en.hasMoreElements()) {
+                            ((IRouteEventListener) en.nextElement()).routeResponseReceived(info.destination,
                                     -1, false);
                         }
                     }
@@ -880,9 +897,8 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
                     //Debug.print("findNextHop: found next hop",4);
                     if (!routeListener.isEmpty()) {
                         Enumeration en = routeListener.elements();
-                        while(en.hasMoreElements()){
-                            ((IRouteEventListener)en.nextElement())
-                            .routeResponseReceived(
+                        while (en.hasMoreElements()) {
+                            ((IRouteEventListener) en.nextElement()).routeResponseReceived(
                                     info.getDestination(), info.hopCount, true);
                         }
                     }
@@ -893,7 +909,7 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
         }
         return info;
     }
-    
+
     /**
      * This method is called whenever this low pan layer receives an incoming
      * packet which is addressed to ourselves and is not fragmented. This method
@@ -907,30 +923,33 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
      * @param length length of the payload of this packet
      */
     private void readPacket(LowPanPacket lpp, int startPos, int length) {
+//        Date date = new Date(System.currentTimeMillis());
+//        System.out.println("[LowPan]" + date + ": Entered readPacket()");
         IProtocolManager protocolManager = null;
         byte protocolNum = lpp.getProtocol();
         byte protocolFamily = lpp.getProtocolFamily();
-        if (protocolFamily == LowPanHeader.DISPATCH_SPOT)
+        if (protocolFamily == LowPanHeader.DISPATCH_SPOT) {
             protocolManager = getProtocolFor(protocolNum);
-        else
+        } else {
             protocolManager = getProtocolFamilyFor(protocolFamily);
-        
+        }
+
         if (protocolManager == null) {
             lpStats.protocolHandlerMissing++;
 //            System.out.println("No protocol manager registered, dropping packet with" +
 //                    " protocol family: " + protocolFamily +" protocol number: "+protocolNum);
         } else {
-            
+
             byte[] rpPayload = new byte[length];
             System.arraycopy(lpp.getRadioPacket().buffer, startPos, rpPayload, 0, length);
-            
+
             // create a headerInfo to provide applications with fields of
             // the radio header and if given the mesh header note that hopcount
             // does not provide the number of taken hops but should be zero all
             // the time
             LowPanHeaderInfo lpHeaderInfo = null;
             RadioPacket packet = lpp.getRadioPacket();
-            if (lpp.isMeshed()){
+            if (lpp.isMeshed()) {
                 lpHeaderInfo = new LowPanHeaderInfo(packet.getDestinationAddress(),
                         packet.getSourceAddress(), packet.getRssi(),
                         packet.getCorr(), packet.getLinkQuality(),
@@ -948,15 +967,20 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
                         packet.getCorr(), packet.getLinkQuality(),
                         packet.getDestinationPanID(), packet.getSourcePanID(),
                         false, packet.getSourceAddress(),
-                        packet.getDestinationAddress(), (byte)0,
+                        packet.getDestinationAddress(), (byte) 0,
                         packet.getTimestamp());
             }
-            if (packet.getDestinationAddress() == 0xffff) lpStats.broadcastsReceived++;
-            else lpStats.unicastsReceived++;
+            if (packet.getDestinationAddress() == 0xffff) {
+                lpStats.broadcastsReceived++;
+            } else {
+                lpStats.unicastsReceived++;
+            }
+//            date = new Date(System.currentTimeMillis());
+//            System.out.println("[LowPan]" + date + ": About to call processIncomingData()");
             protocolManager.processIncomingData(rpPayload, lpHeaderInfo);
         }
     }
-    
+
     private void queueBroadcastPacket(LowPanPacket lpp) {
         if (bCastQueue.size() < MAX_BROADCAST_QUEUE_LENGTH) {
             bCastQueue.put(lpp);
@@ -965,7 +989,7 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
             // Drop packet
         }
     }
-    
+
     /**
      * This method is called whenever low pan has to process a packet that
      * is addressed to another node. It writes the new values in into the
@@ -976,17 +1000,17 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
      * @param finalDestination node that this packet should reach in the end
      */
     private void forwardMeshPacket(LowPanPacket lpp)
-    throws ChannelBusyException {
+            throws ChannelBusyException {
         long lastHop = 0;
         long nextHop = 0;
         int delay = DEFAULT_PACKET_DELAY;
-        
-        lpp.setHopsLeft(lpp.getHopsLeft()-1);
+
+        lpp.setHopsLeft(lpp.getHopsLeft() - 1);
         if (lpp.getHopsLeft() <= 0) {
             lpStats.ttlExpired++;
             return; // time for this packet to vaporize itself
         }
-        
+
         if (lpp.isBCast()) {
             lpStats.meshBroadcastsForwarded++;
             lastHop = 0xffff; // tell forwarder it was a broadcast
@@ -999,18 +1023,17 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
             // Debug.print("" + System.currentTimeMillis() + " forwardMeshPacket: " + lpp, 0);
             // FIXME Needed because otherwise the sender route times out...
             routingManager.getRouteInfo(lpp.getOriginatorAddress());
-            
+
             if (info.nextHop != Constants.INVALID_NEXT_HOP) {
-                
+
                 lpp.getRadioPacket().setDestinationAddress(info.nextHop);
-                
+
                 //save data for notifyForward
                 lastHop = lpp.getRPSourceAddress();
                 nextHop = info.nextHop;
                 delay += DEFAULT_FORWARDING_DELAY + (Math.min(3, info.hopCount) - 1) * DEFAULT_PER_HOP_DELAY;
             } else { // no valid route -- don't send or notify, invalidate route and return
-                //      routingManager.invalidateRoute(lpp.getOriginatorAddress(),
-                //             lpp.getFDestinationAddress());
+                routingManager.invalidateRoute(lpp.getOriginatorAddress(), lpp.getFDestinationAddress());
                 return;
             }
         }
@@ -1028,7 +1051,7 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
                 }
             }
             Utils.sleep(delay); // Delay between packets to allow receivers to keep up
-                                // & to prevent collision with forwarding of fragment
+            // & to prevent collision with forwarding of fragment
         } catch (NoAckException e) {
             Debug.print("forwardMeshPacket: can't forward packet from " +
                     IEEEAddress.toDottedHex(lpp.getOriginatorAddress()) + " to " +
@@ -1039,28 +1062,28 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
                 return;
             }
         }
-        
+
         if (!dataListener.isEmpty()) {
             Enumeration en = dataListener.elements();
-            while(en.hasMoreElements()){
-                ((IDataEventListener)en.nextElement()).notifyForward(lastHop,
+            while (en.hasMoreElements()) {
+                ((IDataEventListener) en.nextElement()).notifyForward(lastHop,
                         nextHop, lpp.getOriginatorAddress(), lpp.getFDestinationAddress());
             }
         }
     }
+
     private IProtocolManager getProtocolFamilyFor(byte protocolFam) {
-        synchronized(protocolFamilyTable) {
+        synchronized (protocolFamilyTable) {
             return (IProtocolManager) protocolFamilyTable.get(protocolFam);
         }
     }
-    
-    
+
     private IProtocolManager getProtocolFor(byte protocolNum) {
-        synchronized(protocolTable) {
+        synchronized (protocolTable) {
             return (IProtocolManager) protocolTable.get(protocolNum);
         }
     }
-    
+
     /**
      * This method is called by receive() everytime a fragmented packet for this
      * node arrives. This method calls the appropriate reassemblyBuffer.
@@ -1073,7 +1096,7 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
         short datagramTag;
         short datagramSize;
         int datagramOffset;
-        
+
         lpStats.fragmentsReceived++;
         //get relevant data
         if (lpp.isMeshed()) {
@@ -1081,7 +1104,7 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
         } else {
             originator = lpp.getRPSourceAddress();
         }
-        
+
         // ATTENTION: according to the low pan spec the following line should
         // actually be destination = packet.getDestinationAddress();
         // here we are assuming that every packet that we are processing in the
@@ -1092,13 +1115,13 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
         // representing the rssi and corr.
         destination = ourAddress;
         //destination = packet.getDestinationAddress();
-        
+
         datagramTag = lpp.getFragTag();
         datagramSize = lpp.getFragSize();
         if (lpp.isFirstFrag()) {
             datagramOffset = 0;
         } else {
-            datagramOffset = (int)(lpp.getFragOff() & 0xff);
+            datagramOffset = (int) (lpp.getFragOff() & 0xff);
         }
 //        System.out.println("reassembly: orig= "+ IEEEAddress.toDottedHex(originator)
 //        +" dest="+ IEEEAddress.toDottedHex(destination)
@@ -1106,8 +1129,7 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
 //                +" datagramOffset="+datagramOffset
 //                +" datagramTag="+datagramTag);
         //is there already a reassembly buffer?
-        String key = Long.toString(originator)+Long.toString(destination)
-        +Integer.toString(datagramTag)+Integer.toString(datagramSize);
+        String key = Long.toString(originator) + Long.toString(destination) + Integer.toString(datagramTag) + Integer.toString(datagramSize);
         ReassemblyBuffer rb = (ReassemblyBuffer) reassemblyBuffers.get(key);
         //if not, create one
         if (rb == null) {
@@ -1118,18 +1140,18 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
             ReassemblyExpiration ex = new ReassemblyExpiration(key, reassemblyBuffers, lpStats);
             reassemblyTimer.schedule(ex, REASSEMBLY_EXPIRATION_TIME);
         }
-        
+
         if (lpp.isFirstFrag()) {
             //Debug.print("reassembly: first fragment received, setting protNum " +
             //"of rb to "+getProtocolNumber(packet), 3);
             rb.protocolNumber = lpp.getProtocol();
             rb.protocolFamily = lpp.getProtocolFamily();
         }
-        
+
         //The firstByte of our fragment
         int firstByte = lpp.getLppPayloadOffset();
         int fragmentLength = lpp.getPayloadSize();
-        
+
         boolean success = rb.write(datagramOffset, lpp.getRadioPacket(),
                 firstByte, fragmentLength);
         if (!success) {
@@ -1141,7 +1163,7 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
             // radioHeader and if given meshHeader note that hopcount does not
             // provide the number of taken hops but should be zero all the time
             LowPanHeaderInfo lpHeaderInfo;
-            if (lpp.isMeshed()){
+            if (lpp.isMeshed()) {
                 RadioPacket packet = lpp.getRadioPacket();
                 lpHeaderInfo = new LowPanHeaderInfo(packet.getDestinationAddress(),
                         packet.getSourceAddress(), packet.getRssi(),
@@ -1152,8 +1174,11 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
                         lpp.getFDestinationAddress(),
                         lpp.getHopsLeft(),
                         packet.getTimestamp());
-                if (lpp.getFDestinationAddress() == 0xffff) lpStats.broadcastsReceived++;
-                else lpStats.unicastsReceived++;
+                if (lpp.getFDestinationAddress() == 0xffff) {
+                    lpStats.broadcastsReceived++;
+                } else {
+                    lpStats.unicastsReceived++;
+                }
             } else {
                 RadioPacket packet = lpp.getRadioPacket();
                 // the packet was not meshDelivered. So source = originator and
@@ -1165,15 +1190,18 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
                         packet.getLinkQuality(), packet.getDestinationPanID(),
                         packet.getSourcePanID(), true,
                         packet.getSourceAddress(), packet.getDestinationAddress(),
-                        (byte)0, packet.getTimestamp());
-                if (packet.getDestinationAddress() == 0xffff)lpStats.broadcastsReceived++;
-                else lpStats.unicastsReceived++;
+                        (byte) 0, packet.getTimestamp());
+                if (packet.getDestinationAddress() == 0xffff) {
+                    lpStats.broadcastsReceived++;
+                } else {
+                    lpStats.unicastsReceived++;
+                }
             }
             // clean up the reassembly buffer
             lpStats.datagramsReassembled++;
             reassemblyBuffers.remove(key);
             IProtocolManager pm;
-            
+
             if (rb.protocolFamily == LowPanHeader.DISPATCH_SPOT) {
                 pm = getProtocolFor(rb.protocolNumber);
             } else {
@@ -1181,10 +1209,12 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
             }
             if (pm != null) {
                 pm.processIncomingData(rb.buffer, lpHeaderInfo);
-            } else lpStats.protocolHandlerMissing++;
+            } else {
+                lpStats.protocolHandlerMissing++;
+            }
         }
     }
-    
+
     /**
      * set the IEEE Address for which we process packets
      * @param addr our IEEE Address as a long
@@ -1192,13 +1222,14 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
     public void setOurAddress(long addr) {
         ourAddress = addr;
     }
-    
+
     /**
      * return a copy of the lowpan statistics object
      */
     public LowPanStats getStatistics() {
         return lpStats.clone();
     }
+
     /**
      * This private class implements a thread to forward broadcast packets at a
      * different rate than unicast packets.  The idea is to limit the likelyhood
@@ -1206,19 +1237,20 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
      * impact of forwarded broadcasts on unicast packets passing through the host.
      **/
     private class BroadcastDispatcherThread extends Thread {
+
         LowPan lowpan;
-        
+
         BroadcastDispatcherThread(LowPan lp) {
             super("BroadcastDispatcher");
             //      System.out.println("Created Broadcast forwarding thread");
             lowpan = lp;
         }
-        
+
         private void monitorQueue() {
             while (true) {
                 LowPanPacket lpp = null;
                 while (lpp == null) {
-                    lpp = (LowPanPacket)bCastQueue.get();
+                    lpp = (LowPanPacket) bCastQueue.get();
                 }
                 // Insert random delay if desired
                 // We assume stack latency is roughly 13 milliseconds and we plan on
@@ -1226,7 +1258,7 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
                 int delay = randomGen.nextInt(10);
                 //   System.out.println("Bcast delay: " + delay*13);
                 Utils.sleep(delay * 13);
-                
+
                 // send the packet
                 try {
                     lowpan.forwardMeshPacket(lpp);
@@ -1236,12 +1268,11 @@ public class LowPan extends BasicService implements ILowPan, RouteEventClient {
                 }
             }
         }
-        
+
         public void run() {
             monitorQueue();
         }
     }
-    
 }
 
 

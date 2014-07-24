@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -37,8 +37,8 @@ import com.sun.spot.peripheral.radio.I802_15_4_MAC;
 import com.sun.spot.peripheral.radio.I802_15_4_PHY;
 import com.sun.spot.peripheral.radio.IProprietaryRadio;
 import com.sun.spot.peripheral.radio.IRadioPolicyManager;
+import com.sun.spot.resources.IResource;
 import com.sun.spot.resourcesharing.IResourceRegistry;
-import com.sun.spot.service.IService;
 import com.sun.spot.util.Properties;
 
 
@@ -48,19 +48,20 @@ import com.sun.spot.util.Properties;
  * This interface provides access to the LED on the Spot board, to the AT91 peripherals,
  * and to other resources such as the software SPI implementation.
  */
-public interface ISpot {
-	
-	/**
-	 * Frequency of ARM master clock
-	 */
-	public static final int MCLK_FREQUENCY = 59904000;
+public interface ISpot extends IResource {
 
-	public static final int SYSTEM_TICKER_TICKS_PER_MILLISECOND = ((MCLK_FREQUENCY  / 128) / 1000);
+    public static final int MCLK_FREQUENCY      = 59904000;
+    public static final int MCLK_FREQUENCY_REV8 = 133324800; // for rev 8 board
 
 	/**
-	 * System property that if true enables output of log messages on System.err
+	 * @return Frequency of ARM master clock
 	 */
-	public static final String PROPERTY_SPOT_DIAGNOSTICS = "spot.diagnostics";
+	int getMclkFrequency(); 
+
+	/**
+	 * @return System ticks per millisecond
+	 */
+    int getTicksPerMillisecond();
 
 	/**
 	 * @return true if running on the host, false if on the SPOT
@@ -83,6 +84,12 @@ public interface ISpot {
 	 * @return ISpotPins the SpotPins
 	 */
 	ISpotPins getSpotPins();
+
+	/**
+	 * Get the singleton AT91_Peripherals masks instance.
+	 * @return AT91_Peripherals the AT91_Peripherals masks
+	 */
+    AT91_Peripherals getAT91_Peripherals();
 	
 	/**
 	 * Get access to the green LED on the Spot processor board.
@@ -285,7 +292,7 @@ public interface ISpot {
 	void setProperty(String key, String value);
 
 	/**
-	 * Return a tick count in the range of zero to {@link #SYSTEM_TICKER_TICKS_PER_MILLISECOND}.
+	 * Return a tick count in the range of zero to 468 (original SPOTs) or 1042 (rev 8 SPOTs).
 	 * The count resets to zero every millisecond
 	 * 
 	 * @return the tick count
@@ -295,6 +302,7 @@ public interface ISpot {
 	/**
 	 * Get the singleton resource registry
 	 * @return the resource registry
+     * @deprecated use {@link com.sun.spot.resources.Resources} instead
 	 */
 	IResourceRegistry getResourceRegistry();
 	
@@ -316,4 +324,27 @@ public interface ISpot {
 	 * @return the remote print manager
 	 */
 	IRemotePrintManager getRemotePrintManager();
+
+    /**
+     * Remove the specified deep sleep listener to receive callbacks.
+     *
+     * @param who the deep sleep listener to add.
+     */
+    public void addDeepSleepListener(IDeepSleepListener who);
+
+    /**
+     * Adds the specified deep sleep listener to receive callbacks.
+     *
+     * @param who the deep sleep listener to add.
+     */
+    public void removeDeepSleepListener(IDeepSleepListener who);
+
+    /**
+     * Returns an array of all the registered deep sleep listeners.
+     *
+     * @return all of the registered IDeepSleepListener or an empty array if no
+     * deep sleep listeners are currently registered.
+     */
+    public IDeepSleepListener[] getDeepSleepListeners();
+
 }

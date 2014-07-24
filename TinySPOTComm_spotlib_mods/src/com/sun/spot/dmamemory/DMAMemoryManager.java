@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -27,13 +27,14 @@ package com.sun.spot.dmamemory;
 import java.util.Hashtable;
 
 import com.sun.spot.peripheral.SpotFatalException;
+import com.sun.spot.resources.Resource;
 import com.sun.squawk.VM;
 import com.sun.squawk.vm.ChannelConstants;
 
 /**
  * Manages a chunk of uncached memory to be used for DMA buffers - see {@link IDMAMemoryManager}
  */
-public class DMAMemoryManager implements IDMAMemoryManager {
+public class DMAMemoryManager extends Resource implements IDMAMemoryManager {
 
 	private MemoryBlock freeBlocks = new MemoryBlock(0, 0, "DUMMY");
 	private MemoryBlock allocatedBlocks = new MemoryBlock(0, 0, "DUMMY");

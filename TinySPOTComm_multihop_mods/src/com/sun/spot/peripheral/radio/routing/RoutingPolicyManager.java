@@ -1,5 +1,6 @@
 /*
- * Copyright 2005-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2005-2009 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2010 Oracle. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -17,9 +18,9 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA
  * 
- * Please contact Sun Microsystems, Inc., 16 Network Circle, Menlo
- * Park, CA 94025 or visit www.sun.com if you need additional
- * information or have any questions.
+ * Please contact Oracle, 16 Network Circle, Menlo Park, CA 94025 or
+ * visit www.oracle.com if you need additional information or have
+ * any questions.
  */
 
 package com.sun.spot.peripheral.radio.routing;
@@ -27,21 +28,21 @@ package com.sun.spot.peripheral.radio.routing;
 import com.sun.spot.peripheral.Spot;
 import com.sun.spot.peripheral.radio.RadioFactory;
 import com.sun.spot.peripheral.radio.routing.interfaces.IRoutingPolicyManager;
+import com.sun.spot.resources.Resources;
 import com.sun.spot.service.BasicService;
-import com.sun.spot.service.ServiceRegistry;
 import com.sun.spot.util.Debug;
 
 /**
- * The onject that oversees the routing policy for this node
+ * The object that oversees the routing policy for this node
  * @author pete
  */
 public class RoutingPolicyManager extends BasicService implements IRoutingPolicyManager {
     private static RoutingPolicyManager rpm;
     
     private static final String ROUTING_POLICY_PROPERTY = "spot.mesh.routing.enable";
-    private static RoutingPolicy defaultPolicy = new RoutingPolicy(RoutingPolicy.IFAWAKE);
+    private static final RoutingPolicy defaultPolicy = new RoutingPolicy(RoutingPolicy.IFAWAKE);
     // Keep old sleep state.  If we exit "route always" mode, we restore the old state
-    private static boolean oldSleepMode;
+    private boolean oldSleepMode;
     
     private RoutingPolicy active;
     
@@ -71,10 +72,11 @@ public class RoutingPolicyManager extends BasicService implements IRoutingPolicy
      */
     public synchronized static IRoutingPolicyManager getInstance() {
         if (rpm == null) {
-            rpm = (RoutingPolicyManager) ServiceRegistry.getInstance().lookup(RoutingPolicyManager.class);
+            rpm = (RoutingPolicyManager) Resources.lookup(RoutingPolicyManager.class);
             if (rpm == null) {
                 rpm = new RoutingPolicyManager();
-                ServiceRegistry.getInstance().add(rpm);
+                rpm.addTag("service=" + rpm.getServiceName());
+                Resources.add(rpm);
             }
         }
         return rpm;

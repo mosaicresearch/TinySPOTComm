@@ -41,6 +41,10 @@ class AT91_TC implements TimerCounterBits, IAT91_TC {
     	Address.fromPrimitive(0xFFFA0000), // base address for first timer counter block
     	Address.fromPrimitive(0xFFFA4000)  // base address for second timer counter block
     };
+
+    private static final Address TC3_BLOCK_BASE_ADDRESS8 =
+            Address.fromPrimitive(0xFFFDC000);  // base address for second timer counter block
+
  
     // offsets for the registers that operate on the whole block
     private static final int TC_BCR = 0xC0 >> 2;     /* Block control register */
@@ -69,14 +73,7 @@ class AT91_TC implements TimerCounterBits, IAT91_TC {
 	private static final int XC_MASK[]	= {TC_TC0XC0S, TC_TC1XC1S, TC_TC2XC2S};
 	
 	/* interrupts for the 6 TCs */
-	private static final int INT_MASK[]	= {
-		IAT91_Peripherals.TC0_ID_MASK,
-		IAT91_Peripherals.TC1_ID_MASK,
-		IAT91_Peripherals.TC2_ID_MASK,
-		IAT91_Peripherals.TC3_ID_MASK,
-		IAT91_Peripherals.TC4_ID_MASK,
-		IAT91_Peripherals.TC5_ID_MASK
-	};
+	private int INT_MASK[];
 
 	/* instance variables */
 	private Address blockBaseAddress;
@@ -92,9 +89,21 @@ class AT91_TC implements TimerCounterBits, IAT91_TC {
 	 * @param pio
 	 */
 	public AT91_TC(int index, IAT91_AIC aic, IAT91_PowerManager pm, ISpotPins spotPins) {
-		if ((IAT91_Peripherals.PERIPHERALS_ACCESSIBLE_FROM_JAVA & INT_MASK[index]) == 0) {
+        AT91_Peripherals spotMasks = Spot.getInstance().getAT91_Peripherals();
+        INT_MASK = new int[] {
+            spotMasks.TC0_ID_MASK,
+            spotMasks.TC1_ID_MASK,
+            spotMasks.TC2_ID_MASK,
+            spotMasks.TC3_ID_MASK,
+            spotMasks.TC4_ID_MASK,
+            spotMasks.TC5_ID_MASK
+        };
+		if ((spotMasks.PERIPHERALS_ACCESSIBLE_FROM_JAVA & INT_MASK[index]) == 0) {
 			throw new SpotFatalException("Timer-Counter " + index + " is not accessible from Java");
 		}
+        if (Spot.getInstance().getHardwareType() > 6) {
+            BLOCK_BASE_ADDRESS[1] = TC3_BLOCK_BASE_ADDRESS8;
+        }
 		this.index = index;
 		blockBaseAddress = BLOCK_BASE_ADDRESS[index / 3];
 		channelBaseAddress = tcBases[index % 3];

@@ -27,6 +27,8 @@ package com.sun.spot.io.j2me.socket;
 import java.io.IOException;
 import java.io.InputStream;
 
+import com.sun.spot.peripheral.TimeoutException;
+
 /**
  * <p>
  * Socket specific InputSteam. This class handles the passing of protocol information while remaining seamless to the user.
@@ -37,6 +39,7 @@ import java.io.InputStream;
 public class SocketProtocolInputStream extends InputStream implements SpotSocketProtocol {
 
     private InputStream in;
+    protected boolean connectionClosedReceived;
 
     /**
      * Create the input stream from another InputStream.
@@ -57,16 +60,72 @@ public class SocketProtocolInputStream extends InputStream implements SpotSocket
             switch (data) {
                 case CONNECTION_CLOSE:
                     data = -1;
+                    connectionClosedReceived();
                     break;
                 case IOEXCEPTION:
                     throw new IOException(readProtocolString());
                 case ESCAPE_CHAR:
                     break;
+                case FLUSH:
+                    return read();
                 default:
                     throw new IOException("Unexpected escape character in protocol: " + data);
             }
         }
         return data;
+    }
+
+    protected void connectionClosedReceived() throws IOException {
+        connectionClosedReceived = true;
+        close();
+    }
+    
+    public int read(byte b[], int off, int len) throws IOException {
+        if (b == null) {
+            throw new NullPointerException();
+        } else if ((off < 0) || (off > b.length) || (len < 0) ||
+                   ((off + len) > b.length) || ((off + len) < 0)) {
+            throw new IndexOutOfBoundsException();
+        } else if (len == 0) {
+            return 0;
+        }
+
+        if (connectionClosedReceived) {
+            return -1;
+        }
+        int c = read();
+        if (c == -1) {
+            return -1;
+        }
+        b[off] = (byte)c;
+
+        int i = 1;
+        try {
+            for (; i < len ; i++) {
+                c = in.read();
+                if (c == ESCAPE_CHAR) {
+                    c = in.read();
+                    switch (c) {
+                        case CONNECTION_CLOSE:
+                            c = -1;
+                            connectionClosedReceived();
+                            return i;
+                        case IOEXCEPTION:
+                            readProtocolString();
+                            return i;
+                        case ESCAPE_CHAR:
+                            break;
+                        case FLUSH:
+                            return i;
+                        default:
+                            throw new IOException("Unexpected escape character in protocol: " + c);
+                    }
+                }
+                b[off + i] = (byte)c;
+            }
+        } catch (IOException ee) {
+        }
+        return i;
     }
 
     /**

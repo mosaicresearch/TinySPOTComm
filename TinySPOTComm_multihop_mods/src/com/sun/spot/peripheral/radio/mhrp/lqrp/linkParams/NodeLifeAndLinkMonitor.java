@@ -1,5 +1,6 @@
 /*
- * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2010 Oracle. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -17,27 +18,32 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA
  * 
- * Please contact Sun Microsystems, Inc., 16 Network Circle, Menlo
- * Park, CA 94025 or visit www.sun.com if you need additional
- * information or have any questions.
+ * Please contact Oracle, 16 Network Circle, Menlo Park, CA 94025 or
+ * visit www.oracle.com if you need additional information or have
+ * any questions.
  */
 
 package com.sun.spot.peripheral.radio.mhrp.lqrp.linkParams;
 
 import com.sun.spot.peripheral.radio.I802_15_4_MAC;
 import com.sun.spot.peripheral.radio.IPacketQualityListener;
+import com.sun.spot.peripheral.radio.IRadioPacketDispatcher;
 import com.sun.spot.peripheral.radio.RadioFactory;
+import com.sun.spot.peripheral.radio.RadioPacketDispatcher;
 import com.sun.spot.peripheral.radio.mhrp.lqrp.Sender;
 import com.sun.spot.peripheral.radio.mhrp.lqrp.messages.LQREQ;
 import com.sun.spot.peripheral.radio.mhrp.lqrp.routing.RoutingTable;
+import com.sun.spot.resources.Resource;
+import com.sun.spot.resources.Resources;
 import com.sun.spot.util.IEEEAddress;
 import java.util.Enumeration;
 import java.util.Hashtable;
+
 /**
  *
  * @author pradip de, modified by Ron Goldman
  */
-public class NodeLifeAndLinkMonitor implements IPacketQualityListener {
+public class NodeLifeAndLinkMonitor extends Resource implements IPacketQualityListener {
     
     private long updateTime = 0;
     //private Vector neighborLinks;
@@ -47,6 +53,10 @@ public class NodeLifeAndLinkMonitor implements IPacketQualityListener {
     private long ourAddress;
     private long basestationAddress;
     private Sender sender;
+    private boolean onHost;
+    private boolean onSpot;
+    private IRadioPacketDispatcher rpd;
+    private I802_15_4_MAC socketMAC;
 
     private RoutingTable routingTable = RoutingTable.getInstance();
 
@@ -62,7 +72,11 @@ public class NodeLifeAndLinkMonitor implements IPacketQualityListener {
      */
     public static synchronized NodeLifeAndLinkMonitor getInstance() {
         if (instance == null) {
-            instance = new NodeLifeAndLinkMonitor();
+            instance = (NodeLifeAndLinkMonitor) Resources.lookup(NodeLifeAndLinkMonitor.class);
+            if (instance == null) {
+                instance = new NodeLifeAndLinkMonitor();
+                Resources.add(instance);
+            }
         }
         return instance;
     }
@@ -70,18 +84,26 @@ public class NodeLifeAndLinkMonitor implements IPacketQualityListener {
     
     public void initialize(long ourAddress) {
         this.ourAddress = ourAddress;
-        I802_15_4_MAC mac = RadioFactory.getSocketMAC();
-        if (mac != null) {
-            basestationAddress = mac.mlmeGet(I802_15_4_MAC.A_EXTENDED_ADDRESS);
+        socketMAC = RadioFactory.getSocketMAC();
+        if (socketMAC != null) {
+            basestationAddress = socketMAC.mlmeGet(I802_15_4_MAC.A_EXTENDED_ADDRESS);
         } else {
             basestationAddress = ourAddress;
         }
+        // check if running on host, maybe in Emulator
+        onHost = RadioFactory.isRunningOnHost();
+        onSpot = !(onHost || RadioFactory.isRunningInEmulator());
+        rpd = RadioPacketDispatcher.getInstance();
     }
 
     public void setSender(Sender sender) {
         this.sender = sender;
+        if (sender != null) {
+            rpd.addPacketQualityListener(this);
+        } else {
+            rpd.removePacketQualityListener(this);
+        }
     }
-
     
     /**
      * Update LQI Sum for each packet received. Called by RadioPacketDispatcher.
@@ -92,7 +114,7 @@ public class NodeLifeAndLinkMonitor implements IPacketQualityListener {
         long now = System.currentTimeMillis();
         if (updateTime <= now) {
             updateLinkInfo();
-            updateTime = now + ConfigLinkParams.SLOT_SIZE;
+            updateTime = System.currentTimeMillis() + ConfigLinkParams.SLOT_SIZE;
         }
         // now update link info for this packet
         if (srcAddress != ourAddress && srcAddress != basestationAddress) { // Received Packet
@@ -100,22 +122,37 @@ public class NodeLifeAndLinkMonitor implements IPacketQualityListener {
 //                    "  to " + IEEEAddress.toDottedHex(dest));
             NbrLinkInfo nlInfo = getNbrLinkInfoWithAddress(srcAddress);
             if (nlInfo == null) {
-                double lqI = (double)lq/(double)ConfigLinkParams.MAX_LQ;
+                double lqI = (double)lq / (double)ConfigLinkParams.MAX_LQ;
                 nlInfo = addLinkWithAddress(srcAddress, lqI); //Configure an initial lqI with the value just seen
                 if (sender != null) {
-                    sender.forwardLQRPMessage(new LQREQ(ourAddress, srcAddress, lqI));
+                    // don't bother sending an LQREQ if on host and not talking to a free range SPOT
+                    if (onSpot || (onHost && (rpd.getMAC(srcAddress) != socketMAC))) {
+                        sender.sendNewLQREQ(new LQREQ(ourAddress, srcAddress, lqI));
+                    }
                 }
             } else if (nlInfo.getNbrLastLQREP() >= 0 && nlInfo.getNbrLastLQREQ() > 0 &&
                     nlInfo.getNbrLastLQREP() < nlInfo.getNbrLastLQREQ() &&
                     (nlInfo.getNbrLastLQREQ() + 500) < now) {
-                nlInfo.setNbrLQ(0.02);   // hasn't replied to our last ping so assume bad link
+                double nbrLQ = nlInfo.getNbrLQ();
+                boolean badRoute = false;
+                if (nbrLQ < 0) {
+                    nbrLQ -= 1.0;
+                    badRoute = nbrLQ < -3.0;    // 3 misses and deactivate the route
+                } else {
+                    nbrLQ *= 3.0/4.0;           // reduce quality by 75%
+                    badRoute = nbrLQ < 0.4;     // & deactivate route if below threshold (= 3 misses)
+                }
+                nlInfo.setNbrLQ(nbrLQ);     // hasn't replied to our last ping so decrease link quality
                 nlInfo.setOurNbrLQ(nlInfo.getCurrNormalizedLQ());
                 nlInfo.setNbrLastLQREP(-1);
-                routingTable.deactivateRoutesUsing(srcAddress);
-                if (sender != null) {    // but give neighbor another chance
-                    sender.forwardLQRPMessage(new LQREQ(ourAddress, srcAddress, nlInfo.getCurrNormalizedLQ()));
+                if (badRoute) {
+                    routingTable.deactivateRoutesUsing(srcAddress);
+                    System.out.println("[notifyPacket] deactivate routes for " + IEEEAddress.toDottedHex(srcAddress));
                 }
-//                System.out.println("Didn't get an LQREP from " + IEEEAddress.toDottedHex(srcAddress));
+                if (sender != null) {    // but give neighbor another chance
+                    sender.sendNewLQREQ(new LQREQ(ourAddress, srcAddress, nlInfo.getCurrNormalizedLQ()));
+                }
+//                System.out.println("[NodeLifeAndLinkMonitor] LQREP timeout with " + IEEEAddress.toDottedHex(srcAddress));
             }
             nlInfo.incSumLQ(lq);
             nlInfo.incNumOfPktsInSlot();
@@ -217,10 +254,11 @@ public class NodeLifeAndLinkMonitor implements IPacketQualityListener {
 //                        " cost = " + (1.0/nbrLInfo.getCurrNormalizedLQ()) +
 //                        "  lqi = " + nbrLInfo.getCurrNormalizedLQ());
                 // if haven't heard from neighbor or neighbor's LQ has changed by >5% check on them
-                if (sender != null && 
-                    (nbrLInfo.getNbrLastHeard() < prevWindow ||
+                if (sender != null && nbrLInfo.getNbrLastLQREQ() > 0 &&
+                    ((nbrLInfo.getNbrLastHeard() < prevWindow &&
+                      nbrLInfo.getNbrLastHeard() > (prevWindow - ConfigLinkParams.SLOT_SIZE)) ||
                      Math.abs(nbrLInfo.getCurrNormalizedLQ() - nbrLInfo.getOurNbrLQ()) > 0.05)) {
-                    sender.forwardLQRPMessage(new LQREQ(ourAddress, nbrLInfo.getNbrAddress(), nbrLInfo.getCurrNormalizedLQ()));
+                    sender.sendNewLQREQ(new LQREQ(ourAddress, nbrLInfo.getNbrAddress(), nbrLInfo.getCurrNormalizedLQ()));
                 }
             }
         }

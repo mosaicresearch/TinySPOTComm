@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -35,10 +35,8 @@ package com.sun.spot.peripheral.ota;
  * To register as a listener:<br><br>
  * 
  * <code>
- * 		...<br>
- * 		IOTACommandServer spotMon = Spot.getInstance().getOTACommandServer();<br>
+ * 		IOTACommandServer spotMon = OTACommandServer.getInstance();<br>
  *		spotMon.addListener(this);<br>
- *		...<br>
  * </code>
  * 
  */

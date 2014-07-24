@@ -29,6 +29,9 @@ import com.sun.spot.interisolate.ReplyEnvelope;
 import com.sun.spot.peripheral.radio.ConnectionID;
 import com.sun.spot.peripheral.radio.IRadioProtocolManager;
 
+/**
+ * @deprecated No longer needed: all Isolates now use a global radio resource.
+ */
 class AddInputConnectionCommand extends RadioRequestEnvelope {
 	private byte portNo;
 	private long macAddress;

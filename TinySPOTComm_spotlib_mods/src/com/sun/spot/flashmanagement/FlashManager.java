@@ -1,5 +1,6 @@
 /*
- * Copyright 2007-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2007-2010 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2010 Oracle. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -17,9 +18,9 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA
  * 
- * Please contact Sun Microsystems, Inc., 16 Network Circle, Menlo
- * Park, CA 94025 or visit www.sun.com if you need additional
- * information or have any questions.
+ * Please contact Oracle, 16 Network Circle, Menlo Park, CA 94025 or
+ * visit www.oracle.com if you need additional information or have
+ * any questions.
  */
 
 package com.sun.spot.flashmanagement;
@@ -33,6 +34,7 @@ import java.util.Vector;
 
 import com.sun.spot.peripheral.ConfigPage;
 import com.sun.spot.peripheral.SpotFatalException;
+import com.sun.spot.resources.Resource;
 import com.sun.spot.util.Utils;
 import com.sun.squawk.VM;
 import com.sun.squawk.peripheral.INorFlashSector;
@@ -43,7 +45,7 @@ import com.sun.squawk.vm.ChannelConstants;
  * FlashManager
  *
  */
-class FlashManager implements IFlashManager {
+class FlashManager extends Resource implements IFlashManager {
 
 	// These three are package visibility to aid testing
 	Hashtable fileDescriptors;
@@ -179,7 +181,7 @@ class FlashManager implements IFlashManager {
 		long guessedAddress = FlashFile.FIRST_FILE_VIRTUAL_ADDRESS;
 		
 		while (guessedAddress <= FlashFile.LAST_FILE_VIRTUAL_ADDRESS) {
-			if (!isVirtualAddressInUse((int) guessedAddress)) {
+			if (!isVirtualAddressInUse((int) guessedAddress, true)) {
 				return (int) guessedAddress;
 			}
 			guessedAddress += FlashFile.VIRTUAL_ADDRESS_FILE_SPACING;
@@ -187,12 +189,12 @@ class FlashManager implements IFlashManager {
 		throw new SpotFatalException("Virtual address space exhausted");
 	}
 
-	private boolean isVirtualAddressInUse(int virtualAddress) {
+	private boolean isVirtualAddressInUse(int virtualAddress, boolean obsoleteInUse) {
 		Enumeration e = fileDescriptors.elements();
 		while (e.hasMoreElements()) {
 			FlashFileDescriptor descriptor = (FlashFileDescriptor) e.nextElement();
-			if (descriptor.getVirtualAddress() == virtualAddress && !descriptor.isObsolete()) {
-				return true;
+			if (descriptor.getVirtualAddress() == virtualAddress) {
+                return obsoleteInUse || !descriptor.isObsolete();
 			}
 		}
 		return false;				
@@ -320,7 +322,7 @@ class FlashManager implements IFlashManager {
 			throw new IllegalArgumentException("Virtual address 0x" + Integer.toHexString(virtualAddress) + " is too high");
 		if (virtualAddress % FlashFile.VIRTUAL_ADDRESS_FILE_SPACING != 0)
 			throw new IllegalArgumentException("Virtual address 0x" + Integer.toHexString(virtualAddress) + " is not on a valid boundary");
-		if (isVirtualAddressInUse(virtualAddress))
+		if (isVirtualAddressInUse(virtualAddress, false))
 			throw new IllegalArgumentException("Virtual address 0x" + Integer.toHexString(virtualAddress) + " is already allocated");
 	}
 
@@ -329,7 +331,7 @@ class FlashManager implements IFlashManager {
 	 */
 	private IAddressableNorFlashSector getFatSector() {
 		if (fatSector == null) {
-			fatSector = flashSectorFactory.create(ConfigPage.FAT_SECTOR_NUMBER, INorFlashSector.SYSTEM_PURPOSED);
+			fatSector = flashSectorFactory.create(ConfigPage.FAT_SECTOR, INorFlashSector.SYSTEM_PURPOSED);
 		}
 		return fatSector;
 	}

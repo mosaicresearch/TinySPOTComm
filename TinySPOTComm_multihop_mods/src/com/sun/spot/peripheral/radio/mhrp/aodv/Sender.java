@@ -342,44 +342,49 @@ public class Sender extends Thread {
      */
     
     private void sendRERR(RERR message) throws ChannelBusyException {
-        byte[] buffer = message.writeMessage();
-        long destinationAddress =
-                (routingTable.getNextHopInfo(message.getOrigAddress())).nextHop;
-//        Debug.print(
-//                "[AODV] sendRERRMessage to " + new IEEEAddress(message.getOrigAddress()).asDottedHex()
-//                + " through " + new IEEEAddress(destinationAddress).asDottedHex()
-//                + " at " + System.currentTimeMillis());
-        if (destinationAddress != Constants.INVALID_NEXT_HOP) {
-	    // Try only once, since we may be reporting *THIS* is broken
-            try {
-                lowPan.sendWithoutMeshingOrFragmentation(Constants.AODV_PROTOCOL_NUMBER,
-                        destinationAddress, buffer, 0, buffer.length);
-                
-            } catch (NoAckException e) {
+        if (message.getOrigAddress() != ourAddress) {
+            byte[] buffer = message.writeMessage();
+            long destinationAddress =
+                    (routingTable.getNextHopInfo(message.getOrigAddress())).nextHop;
+            if (destinationAddress == Constants.INVALID_NEXT_HOP) {
+//                Debug.print(
+//                        "[AODV] broadcast RERR message for route from " + IEEEAddress.toDottedHex(message.getOrigAddress())
+//                        + " to " + IEEEAddress.toDottedHex(message.getDestAddress())
+//                        + " at " + System.currentTimeMillis());
+                destinationAddress = 0xffff;        // no current route, so broadcast RERR message
+                lowPan.sendBroadcast(Constants.AODV_PROTOCOL_NUMBER, buffer, 0, buffer.length, 0);
+            } else {
+//                Debug.print(
+//                        "[AODV] send RERR message to " + IEEEAddress.toDottedHex(message.getOrigAddress())
+//                        + " through " + IEEEAddress.toDottedHex(destinationAddress)
+//                        + " at " + System.currentTimeMillis());
+                // Try only once, since we may be reporting *THIS* is broken
+                try {
+                    lowPan.sendWithoutMeshingOrFragmentation(Constants.AODV_PROTOCOL_NUMBER,
+                            destinationAddress, buffer, 0, buffer.length);
+
+                } catch (NoAckException e) {
 //                    Debug.print("[AODV] sendRERR: can't send RERR to "
-//                            + new IEEEAddress(message.getOrigAddress()).asDottedHex()
+//                            + IEEEAddress.toDottedHex(message.getOrigAddress())
 //                            + " through "
-//                            + new IEEEAddress(destinationAddress).asDottedHex()
+//                            + IEEEAddress.toDottedHex(destinationAddress)
 //                            + " attempt " + i + "/" + MAX_RETRIES);
-                routingTable.deactivateRoute(message.getDestAddress(),
-                        message.getOrigAddress());
-                // FIXME Remove our address from the routing entry
+                    routingTable.deactivateRoute(message.getDestAddress(), message.getOrigAddress());
+                    // FIXME Remove our address from the routing entry
+                }
             }
 
-        } else {
-            //Debug.print("sendRERR: can't find a next hop for RERR", 1);
-        }
-        if (!mhRouteListeners.isEmpty()) {
-            Enumeration en = mhRouteListeners.elements();
-            while (en.hasMoreElements()) {
-                ((IMHEventListener)
-                en.nextElement()).RERRSent(message.getOrigAddress(),
-                        message.getDestAddress());
-                
+            if (!mhRouteListeners.isEmpty()) {
+                Enumeration en = mhRouteListeners.elements();
+                while (en.hasMoreElements()) {
+                    ((IMHEventListener) en.nextElement()).RERRSent(message.getOrigAddress(),
+                            message.getDestAddress());
+
+                }
             }
+            //Debug.print("sendRERR: sent RERR to " + new IEEEAddress(message.getOrigAddress()).asDottedHex()
+            //+ " through " + new IEEEAddress(cs.destinationAddress).asDottedHex(), 1);
         }
-        //Debug.print("sendRERR: sent RERR to " + new IEEEAddress(message.getOrigAddress()).asDottedHex()
-        //+ " through " + new IEEEAddress(cs.destinationAddress).asDottedHex(), 1);
     }
     
     private class RouteWantedEntry {

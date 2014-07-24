@@ -1,5 +1,6 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2010 Oracle. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -17,9 +18,9 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA
  * 
- * Please contact Sun Microsystems, Inc., 16 Network Circle, Menlo
- * Park, CA 94025 or visit www.sun.com if you need additional
- * information or have any questions.
+ * Please contact Oracle, 16 Network Circle, Menlo Park, CA 94025 or
+ * visit www.oracle.com if you need additional information or have
+ * any questions.
  */
 
 package com.sun.spot.networktools;
@@ -37,6 +38,8 @@ import com.sun.spot.peripheral.radio.RadioPolicy;
 import com.sun.spot.peripheral.radio.routing.RouteInfo;
 import com.sun.spot.peripheral.radio.routing.RouteTable;
 import com.sun.spot.peripheral.radio.routing.interfaces.IRoutingManager;
+import com.sun.spot.resources.Resources;
+import com.sun.spot.service.BasicService;
 import com.sun.spot.service.IService;
 import com.sun.spot.util.IEEEAddress;
 import java.util.Enumeration;
@@ -44,7 +47,7 @@ import java.util.Enumeration;
 /**
  * A daemon that responds to network management requests
  */
-public class NetManagementServer implements Runnable, IService {
+public class NetManagementServer extends BasicService implements Runnable, IService {
     
     /**
      * the spot property that enables this server
@@ -61,7 +64,7 @@ public class NetManagementServer implements Runnable, IService {
     private static final int CONFIG_CMD = 0x03;
     private static final int ROUTETABLE_CMD = 0x04;
     private static final int MAX_RETRIES = 3;
-    private static RadiogramConnection reqConn;
+    private RadiogramConnection reqConn;
     private RadiogramConnection respConn;
     private Thread mainThread;
     private int state;
@@ -102,12 +105,15 @@ public class NetManagementServer implements Runnable, IService {
      * @return a NetManagementServer singleton
      */
     public static synchronized IService getNetManagementServer() {
-        if (netMgr == null)
+        if (netMgr == null) {
             netMgr = new NetManagementServer();
+            netMgr.addTag("service=" + netMgr.getServiceName());
+            Resources.add(netMgr);
+        }
         return netMgr;
     }
     
-    private static Datagram initRequest(long dest) {
+    private Datagram initRequest(long dest) {
         RadioFactory.setProperty("spot.log.connections", "false");
         try {
             reqConn = (RadiogramConnection)Connector.open("radiogram://" + dest + ":" +
@@ -133,7 +139,7 @@ public class NetManagementServer implements Runnable, IService {
         return null;
     }
     
-    private static void cleanupRequest() {
+    private void cleanupRequest() {
         if (reqConn != null) {
             try {
                 reqConn.close();
@@ -152,7 +158,7 @@ public class NetManagementServer implements Runnable, IService {
             }
         }
     }
-    private static Datagram makeRequest(Datagram datagram) {
+    private Datagram makeRequest(Datagram datagram) {
         RadiogramConnection respConn=null;
         Datagram dg = null;
         if (reqConn != null) {
@@ -189,20 +195,21 @@ public class NetManagementServer implements Runnable, IService {
      */
     public static String requestRoute(long src, long dst) {
         String result=null;
-        Datagram dg = initRequest(src);
+        NetManagementServer nms = (NetManagementServer)getNetManagementServer();
+        Datagram dg = nms.initRequest(src);
         if (dg != null) {
             dg.reset();
             try {
                 dg.writeByte(ROUTE_CMD);
                 dg.writeLong(dst);
-                dg = makeRequest(dg);
+                dg = nms.makeRequest(dg);
                 if (dg != null) {
                     result = dg.readUTF();
                 } else result = null;
             } catch (IOException e) {
                 e.printStackTrace();
             } finally {
-                cleanupRequest();
+                nms.cleanupRequest();
             }
         } else
             return null;
@@ -229,12 +236,13 @@ public class NetManagementServer implements Runnable, IService {
      */
     public static RouteTable requestRouteTable(long target) {
         RouteTable rt = null;
-        Datagram dg = initRequest(target);
+        NetManagementServer nms = (NetManagementServer)getNetManagementServer();
+        Datagram dg = nms.initRequest(target);
         if (dg != null) {
             dg.reset();
             try {
                 dg.writeByte(ROUTETABLE_CMD);
-                dg = makeRequest(dg);
+                dg = nms.makeRequest(dg);
                 if (dg != null) {
                     // parse result
                     int size = dg.readInt(); // number of route entries
@@ -247,7 +255,7 @@ public class NetManagementServer implements Runnable, IService {
             } catch (IOException e) {
                 e.printStackTrace();
             } finally {
-                cleanupRequest();
+                nms.cleanupRequest();
             }
         } else
             return null;
@@ -278,12 +286,13 @@ public class NetManagementServer implements Runnable, IService {
      */
     public static LowPanStats requestStats(long target) {
         LowPanStats lps=null;
-        Datagram dg = initRequest(target);
+        NetManagementServer nms = (NetManagementServer)getNetManagementServer();
+        Datagram dg = nms.initRequest(target);
         if (dg != null) {
             dg.reset();
             try {
                 dg.writeByte(STATS_CMD);
-                dg = makeRequest(dg);
+                dg = nms.makeRequest(dg);
                 if (dg != null) {
                     // parse result
                     int size = dg.readInt();
@@ -296,7 +305,7 @@ public class NetManagementServer implements Runnable, IService {
             } catch (IOException e) {
                 e.printStackTrace();
             } finally {
-                cleanupRequest();
+                nms.cleanupRequest();
             }
             
         } else

@@ -1,5 +1,6 @@
 /*
  * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2010 Oracle. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -17,21 +18,21 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA
  * 
- * Please contact Sun Microsystems, Inc., 16 Network Circle, Menlo
- * Park, CA 94025 or visit www.sun.com if you need additional
- * information or have any questions.
+ * Please contact Oracle, 16 Network Circle, Menlo Park, CA 94025 or
+ * visit www.oracle.com if you need additional information or have
+ * any questions.
  */
 
 package com.sun.spot.peripheral.basestation;
 
 import java.io.IOException;
 
-import com.sun.spot.peripheral.ILed;
 import com.sun.spot.peripheral.Spot;
 import com.sun.spot.peripheral.SpotFatalException;
 import com.sun.spot.peripheral.radio.I802_15_4_MAC;
 import com.sun.spot.peripheral.radio.RadioFactory;
 import com.sun.spot.peripheral.radio.SpotSerialPipe;
+import com.sun.spot.resources.transducers.ILed;
 import com.sun.spot.service.Heartbeat;
 import com.sun.spot.util.Queue;
 import com.sun.spot.util.Utils;
@@ -39,6 +40,8 @@ import com.sun.squawk.VM;
 
 public class MACProxyServer implements IResettableServer {
 
+    private static final int NUMBER_WORKER_THREADS = 6;
+    
     private Queue commandQueue = new Queue();
     private SpotSerialPipe serialPipe;
     private byte[] inputBuffer = new byte[255];
@@ -55,11 +58,13 @@ public class MACProxyServer implements IResettableServer {
     public void run() {
         heartbeat.start();
 
-        new MACProxyWorkerThread().start();
-        new MACProxyWorkerThread().start();
+        for (int i = 0; i < NUMBER_WORKER_THREADS; i++) {
+            new MACProxyWorkerThread().start();
+        }
         System.out.println("base station ready ...");
         VM.getCurrentIsolate().clearOut();
         VM.getCurrentIsolate().clearErr();
+        VM.getCurrentIsolate().addOut("serial://usart");
         VM.getCurrentIsolate().addErr("serial://usart");
 
         while (true) {
@@ -107,7 +112,10 @@ public class MACProxyServer implements IResettableServer {
             case MACCommand.MLMESetCommand:                    return new MLMESetCommand();
             case MACCommand.MLMEStartCommand:                  return new MLMEStartCommand();
             case MACCommand.SetPLMETransmitPowerCommand:       return new SetPLMETransmitPowerCommand();
+            case MACCommand.SetPLMEChannelCommand:             return new SetPLMEChannelCommand();
             case MACCommand.ResetProxyCommand:                 return new ResetProxyCommand().with(this);
+            case MACCommand.GetRxErrorCommand:                 return new GetRxErrorCommand();
+            case MACCommand.ResetErrorCountersCommand:         return new ResetErrorCountersCommand();
             case MACCommand.ExitCommand:                       return new ExitCommand();
 
             default:

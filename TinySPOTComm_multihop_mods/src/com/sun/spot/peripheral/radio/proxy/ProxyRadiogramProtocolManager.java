@@ -28,6 +28,9 @@ import com.sun.spot.interisolate.ReplyEnvelope;
 import com.sun.spot.peripheral.radio.ConnectionID;
 import com.sun.spot.peripheral.radio.IRadiogramProtocolManager;
 
+/**
+ * @deprecated No longer needed: all Isolates now use a global radio resource.
+ */
 public class ProxyRadiogramProtocolManager extends ProxyRadioProtocolManager implements IRadiogramProtocolManager{
 	public static final String CHANNEL_IDENTIFIER = "RADIOGRAM_SERVER";
 

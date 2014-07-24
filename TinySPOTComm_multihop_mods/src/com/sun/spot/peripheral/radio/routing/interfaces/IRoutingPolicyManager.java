@@ -1,5 +1,5 @@
 /*
- * Copyright 2005-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2005-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -25,15 +25,14 @@
 package com.sun.spot.peripheral.radio.routing.interfaces;
 
 import com.sun.spot.peripheral.radio.routing.RoutingPolicy;
+import com.sun.spot.service.IService;
 
 /**
  *
  * @author Pete St. Pierre
  * based on the RoutingPolicy and RoutingPolicyManager classes developed by Syntropy
  */
-public interface IRoutingPolicyManager {
-    
-   
+public interface IRoutingPolicyManager extends IService {
     
     /**
      * Notify the policy manager that a policy has changed

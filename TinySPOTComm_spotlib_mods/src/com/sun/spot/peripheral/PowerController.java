@@ -1,5 +1,6 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2010 Oracle. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -17,24 +18,34 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA
  * 
- * Please contact Sun Microsystems, Inc., 16 Network Circle, Menlo
- * Park, CA 94025 or visit www.sun.com if you need additional
- * information or have any questions.
+ * Please contact Oracle, 16 Network Circle, Menlo Park, CA 94025 or
+ * visit www.oracle.com if you need additional information or have
+ * any questions.
  */
 
 package com.sun.spot.peripheral;
 
+import com.sun.spot.resources.Resource;
+import com.sun.spot.resources.transducers.ITemperatureInput;
+import com.sun.spot.resources.transducers.IMeasurementInfo;
+import com.sun.spot.resources.transducers.SensorEvent;
+import com.sun.spot.resources.transducers.TemperatureInputEvent;
 import com.sun.squawk.*;
 import com.sun.squawk.vm.*;
+import java.io.IOException;
 
-class PowerController implements IPowerController {
+class PowerController extends Resource implements IPowerController {
 	
-	static final int SPI_CONFIG = (ISpiMaster.CSR_NCPHA | ISpiMaster.CSR_BITS_8 | ISpiMaster.CSR_SCBR_250K | ISpiMaster.CSR_DLYBCT_200);
+	static final int SPI_CONFIG  = (ISpiMaster.CSR_NCPHA | ISpiMaster.CSR_BITS_8 | ISpiMaster.CSR_SCBR_250K | ISpiMaster.CSR_DLYBCT_200);
 
-	private ISpiMaster spiMaster;
-	private SpiPcs chipSelectPin;
-	private IBattery battery;
-	
+	protected ISpiMaster spiMaster;
+	protected SpiPcs chipSelectPin;
+	protected IBattery battery;
+
+    protected PowerController() {
+        // for subclasses
+    }
+    
 	public PowerController(ISpiMaster spiMaster, PeripheralChipSelect pcs) {
 		this.spiMaster = spiMaster;
 		this.chipSelectPin = new SpiPcs(pcs, SPI_CONFIG);
@@ -47,16 +58,18 @@ class PowerController implements IPowerController {
 		byte[] rxBuf = new byte[1];
 		byte[] txBuf = new byte[] {GET_STRING_LEN_CMD};
 		spiMaster.sendAndReceive(chipSelectPin, 1, txBuf, 1, 1, rxBuf);
-		
+	
 		int stringSize = rxBuf[0] & 0xFF;
-				
-		txBuf[0] = GET_STRING_CMD;
+
+        txBuf[0] = GET_STRING_CMD;
 		rxBuf = new byte[stringSize];
 		spiMaster.sendAndReceive(chipSelectPin, 1, txBuf, 1, stringSize, rxBuf);
 		
-		StringBuffer s = new StringBuffer(10);
+		StringBuffer s = new StringBuffer(stringSize);
 		for (int i = 0; i < rxBuf.length; i++) {
-			s.append((char)rxBuf[i]);
+            if (rxBuf[i] != 0) {
+                s.append((char) rxBuf[i]);
+            }
 		}
 		return s.toString();
 	}
@@ -77,7 +90,6 @@ class PowerController implements IPowerController {
         int timeHigh = (int) ((systemTimeMillis>>32) & 0xFFFFFFFF);
 		int timeLow = (int) (systemTimeMillis & 0xFFFFFFFF);
 		long delta = systemTimeMillis - System.currentTimeMillis();
-                
 		byte[] txBuf = new byte[9];
 		txBuf[0] = IPowerController.SET_TIME_CMD;
 		for (int i = 8; i > 0; i--) {
@@ -90,12 +102,12 @@ class PowerController implements IPowerController {
 		Spot.getInstance().getSleepManager().adjustStartTime(delta);
 	}	
 
-	public int getStatus() {
-		return VM.execSyncIO(ChannelConstants.AVR_GET_STATUS, 0);
+	public int getEvents() {
+        return VM.execSyncIO(ChannelConstants.AVR_GET_STATUS, 0);
 	}
 
-	public int getPowerStatus() {
-		return makeSingleByteQuery(IPowerController.GET_POWER_STATUS_CMD);
+	public int getPowerFault() {
+		return makeSingleByteQuery(IPowerController.GET_POWER_FAULT_CMD);
 	}
 	
 	public int getVcore() {
@@ -157,21 +169,25 @@ class PowerController implements IPowerController {
 		spiMaster.sendAndReceive(chipSelectPin, 2, txBuf, 0, 0, null);
 	}
 
-	private int makeADCQuery(byte avrQuery, int conversionMultiplier) {
-		byte[] rxBuf = new byte[2];
-		byte[] txBuf = new byte[] {avrQuery};
-		spiMaster.sendAndReceive(chipSelectPin, 1, txBuf, 1, 2, rxBuf);
-		int adc_value = rxBuf[1] << 8 | (rxBuf[0] & 0xff);
+	protected int makeADCQuery(byte avrQuery, int conversionMultiplier) {
+		int adc_value = makeDoubleByteQuery(avrQuery);
 		return (adc_value * conversionMultiplier) / 1024;
 	}
 
-	private int makeSingleByteQuery(byte command) {
+	protected int makeSingleByteQuery(byte command) {
 		byte[] rxBuf = new byte[1];
 		byte[] txBuf = new byte[] {command};
 		spiMaster.sendAndReceive(chipSelectPin, 1, txBuf, 1, 1, rxBuf);
 		return rxBuf[0] & 0xFF;
 	}
 	
+	protected int makeDoubleByteQuery(byte command) {
+		byte[] rxBuf = new byte[2];
+		byte[] txBuf = new byte[] {command};
+		spiMaster.sendAndReceive(chipSelectPin, 1, txBuf, 1, 2, rxBuf);
+		return (rxBuf[1] & 0xff) << 8 | (rxBuf[0] & 0xff);
+	}
+
 	public void disableSynchronisation() {
 		VM.execSyncIO(ChannelConstants.ENABLE_AVR_CLOCK_SYNCHRONISATION, 0);
 	}
@@ -187,21 +203,35 @@ class PowerController implements IPowerController {
 		spiMaster.sendAndReceive(chipSelectPin, 2, txBuf, 0, 0, null);
 	}
 
-	public synchronized IBattery getBattery() {
+	public int getControl() {
+		return makeSingleByteQuery(IPowerController.GET_CONTROL_CMD);
+	}
+
+    public synchronized IBattery getBattery() {
 		if (battery == null) {
 			battery = new Battery(chipSelectPin, spiMaster);
 		}
 		return battery;
 	}
 
-	public boolean getUSBHP() {
-		return makeSingleByteQuery(IPowerController.GET_USB_HP_CMD) != 0;
-	}
+    // Rev 8 routines
 
-	public void setUSBHP(boolean high) {
-        byte[] txBuf = new byte[2];
-		txBuf[0] = IPowerController.SET_USB_HP_CMD;
-		txBuf[1] = (byte) (high ? 1 : 0);
-		spiMaster.sendAndReceive(chipSelectPin, 2, txBuf, 0, 0, null);
+    public void setWatchdog(long time) {
+		throw new IllegalStateException("Watchdog not implemented prior Rev 8");
 	}
+	
+	public void restartWatchdog() {
+		return;
+ 	}
+
+    public int getStatus() {
+        return 0;
+    }
+
+    public int getButtonEvent() {
+        return 0;
+    }
+
+    public void setShutdownTimeout(int time) { }
+
 }

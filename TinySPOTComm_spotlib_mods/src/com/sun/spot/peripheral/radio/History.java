@@ -1,5 +1,6 @@
 /*
  * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2010 Oracle. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -17,9 +18,9 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA
  * 
- * Please contact Sun Microsystems, Inc., 16 Network Circle, Menlo
- * Park, CA 94025 or visit www.sun.com if you need additional
- * information or have any questions.
+ * Please contact Oracle, 16 Network Circle, Menlo Park, CA 94025 or
+ * visit www.oracle.com if you need additional information or have
+ * any questions.
  */
 
 package com.sun.spot.peripheral.radio;
@@ -32,6 +33,7 @@ class History {
 
 	private Vector history;
 	private HistoryEvent currentHistoryEvent;
+    private int numEvents = 0;
 	
 	History() {
 	    	history = new Vector(10);
@@ -46,6 +48,7 @@ class History {
 		history.removeElementAt(0);
 		history.addElement(currentHistoryEvent);
 		currentHistoryEvent.setReceiveData(overflowDetected, fifoRemaining, fsmState, fifopPinHigh, fifoPinHigh);
+        numEvents++;
 	}
 
 	void setSPIData(RadioPacket rp, int spiResult, int size, boolean fifopPinHigh, boolean fifoPinHigh) {
@@ -66,7 +69,7 @@ class History {
 
 	void dump() {
 		Utils.log("FIFO history");
-		for (int i = 0; i < 10; i++) {
+		for (int i = 0; i < 10 && i < numEvents; i++) {
 			HistoryEvent he = (HistoryEvent)history.elementAt(i);
 			Utils.log("EVENT "+i);
 			he.display();

@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -29,19 +29,25 @@ import com.sun.squawk.vm.ChannelConstants;
 
 class SecuredSiliconArea implements ISecuredSiliconArea {
 
+    private int areaLength;
+    private int areaAddress;
+
+    public SecuredSiliconArea(int hardwareRev) {
+        areaLength = 256;
+        areaAddress = 0x80;
+    }
+
 	public byte[] read() {
-		byte[] result = new byte[256];
+		byte[] result = new byte[areaLength];
 		VM.execSyncIO(0, ChannelConstants.READ_SECURED_SILICON_AREA, 0, 0, 0, 0, 0, 0, result, null);
 		return result;
 	}
-
-	public static final int SERIAL_NUMBER_FLASH_OFFSET = 0x80;
 
 	public long readSerialNumber() {
 		byte[] securedData = read();
 		long result = 0;
 		for (int i = 0; i < 8; i++) {
-			result |= ((long)(securedData[i+SERIAL_NUMBER_FLASH_OFFSET] & 0xff)) << (i*8);
+			result |= ((long)(securedData[i+areaAddress] & 0xff)) << (i*8);
 		}
 		return result;
 	}

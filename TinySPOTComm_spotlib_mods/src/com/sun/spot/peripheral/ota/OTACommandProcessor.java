@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -62,21 +62,22 @@ import javax.microedition.io.Connection;
  * Spot's config page and/or applications remotely, retrieving the config page
  * contents, and restarting the Spot.
  */
-class OTACommandProcessor extends Thread implements ISpotAdminConstants, IOTACommandProcessor, IOTACommandHelper, IOTACommandRepository {
+class OTACommandProcessor extends Thread implements ISpotAdminConstants,
+        IOTACommandProcessor, IOTACommandHelper, IOTACommandRepository {
 
 	public static final int PORT = 8;
 
 	private static final int COMMAND_OFFSET = 2;
 	private static final int CRC_BLOCK_SIZE = 121; // bug 1131: if you set this to 122 then CRC stream blocks are 128 long and
-												   // fit exactly into two USB frames - these are sent to the host but not
-												   // passed to the application
+						// fit exactly into two USB frames - these are sent to the host but not
+					        // passed to the application
 
 	private Vector listeners = new Vector();
 	private ISpot spot;
 	private boolean suspended = false;
 	private boolean isRemote = true;
 	private long timeOfLastCommunication = 0;
-    private long startTime = 0;
+        private long startTime = 0;
 	private DataInputStream dataInputStream;
 	private DataOutputStream dataOutputStream;
 	private int flashedByteCount;
@@ -212,21 +213,27 @@ class OTACommandProcessor extends Thread implements ISpotAdminConstants, IOTACom
 					Utils.log("[OTACommandProcessor] Got verification failure while processing command: ");					e.printStackTrace();
 					sendErrorDetails(ERROR_COMMAND_VERIFICATION_FAILED, e.getMessage());
 				} catch (IOException e) {
-					Utils.log("[OTACommandProcessor] Got IOException while processing command: " + e.getMessage());
+                    if (!closed) {
+                        Utils.log("[OTACommandProcessor] Closing session as got IOException while processing command: " + e.getMessage());
+                    }
                     break;      // an IOException probably means a problem communicating with host,
                                 // so don't compound matters by trying to report an error via radio
 				} catch (Throwable e) {
-					Utils.log("[OTACommandProcessor] Got exception while processing command: ");
-					e.printStackTrace();
-					sendErrorDetails("Error while processing command: " + e.getMessage());
+                    if (!closed) {
+                        Utils.log("[OTACommandProcessor] Closing session as got exception while processing command: ");
+                        e.printStackTrace();
+                        sendErrorDetails("Error while processing command: " + e.getMessage());
+                    }
                     break;
 				} finally {
 					conn.setRadioPolicy(RadioPolicy.AUTOMATIC);
 				}
 			}
 		} catch (Throwable e1) {
-			System.err.println("[OTACommandProcessor] Closing session as got exception communicating with host");
-			e1.printStackTrace();
+            if (!closed) {
+                System.err.println("[OTACommandProcessor] Closing session as got exception communicating with host");
+                e1.printStackTrace();
+            }
 		} finally {
 			closedown();
 		}
@@ -273,7 +280,9 @@ class OTACommandProcessor extends Thread implements ISpotAdminConstants, IOTACom
 	 *            the listener
 	 */
 	public void addListener(IOTACommandServerListener sml) {
-		listeners.addElement(sml);
+        if (!listeners.contains(sml)) {
+            listeners.addElement(sml);
+        }
 	}
 
 	/**
@@ -304,8 +313,8 @@ class OTACommandProcessor extends Thread implements ISpotAdminConstants, IOTACom
 			+ " (" + bootloaderTimestamp + ") ";
 	}
 
-	public void sendPrompt() throws IOException {
-		sendUTF(BOOTLOADER_CMD_HEADER + ">");
+	public void sendPrompt() throws IOException {  
+	    sendUTF(BOOTLOADER_CMD_HEADER + ">");
 	}
 
 	public void replaceSuiteFile(DataInputStream params, String filename, int virtualAddress) throws IOException {
@@ -405,7 +414,7 @@ class OTACommandProcessor extends Thread implements ISpotAdminConstants, IOTACom
 	private static void conditionallyDirectOutputToUsart() {
 		Isolate.currentIsolate().clearOut();
 		Isolate.currentIsolate().clearErr();
-		if (Utils.isOptionSelected(ISpot.PROPERTY_SPOT_DIAGNOSTICS, false) && Spot.getInstance().getUsbPowerDaemon().isUsbEnumerated()) {
+		if (Utils.isOptionSelected(Utils.PROPERTY_SPOT_DIAGNOSTICS, false) && Spot.getInstance().getUsbPowerDaemon().isUsbEnumerated()) {
 			// diagnostics are on and the USB appears to be in use
 			Isolate.currentIsolate().addOut("serial://usart");
 			Isolate.currentIsolate().addErr("serial://usart");
@@ -482,24 +491,23 @@ class OTACommandProcessor extends Thread implements ISpotAdminConstants, IOTACom
 	public void receiveFile(long dataSize, OutputStream flashOutputStream) throws IOException {
 		flashedByteCount = 0;
 		try {
-			boolean isUsbEnumerated = spot.getUsbPowerDaemon().isUsbEnumerated();
+//			boolean isUsbEnumerated = spot.getUsbPowerDaemon().isUsbEnumerated();
 			byte[] buffer = new byte[FlashFileOutputStream.DEFAULT_BUFFER_SIZE];
 			while (flashedByteCount < dataSize) {
 				int bytesToWriteThisLoop = Math.min(buffer.length, (int) dataSize - flashedByteCount);
 				dataInputStream.readFully(buffer, 0, bytesToWriteThisLoop);
-				if (!isUsbEnumerated) {
-					Utils.sleep(20); // when using a USART connection, allow time for the stream traffic to quiesce
-									 // TODO find out why this is necessary - bug 1133
-				}
-                if (isRemote) {
-                    if (dataInputStream.available() > 0) {
-                        throw new IOException("Unexpected input while receiving file!");
-                    }
-                    dataOutputStream.writeUTF("ok");
-                    dataOutputStream.flush();
-                }
+//				if (!isUsbEnumerated) {
+//					Utils.sleep(20); // when using a USART connection, allow time for the stream traffic to quiesce
+//									 // TODO find out why this is necessary - bug 1133
+//				}                    // March 2010 - don't seem to need this anymore
 				flashOutputStream.write(buffer, 0, bytesToWriteThisLoop);
 				flashedByteCount += bytesToWriteThisLoop;
+                if (dataInputStream.available() > 0) {
+                    dataOutputStream.writeUTF("Unexpected input while receiving file!");
+                    throw new IOException("Unexpected input while receiving file!");
+                }
+                dataOutputStream.writeUTF("ok");
+                dataOutputStream.flush();
 			}
 		} catch (TimeoutException e) {
 			throw new RuntimeException("Timeout failure during flashing operation");
@@ -537,7 +545,7 @@ class OTACommandProcessor extends Thread implements ISpotAdminConstants, IOTACom
 		Isolate[] allIsolates = Isolate.getIsolates();
 		for (int i = 0; i < allIsolates.length; i++) {
 			if (allIsolates[i].getParentSuiteSourceURI().equals(suiteUri)) {
-				return true;
+				return !allIsolates[i].isExited();
 			}
 		}
 		return false;

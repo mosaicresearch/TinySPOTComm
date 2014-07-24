@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -24,6 +24,7 @@
 
 package com.sun.spot.peripheral.radio;
 
+import com.sun.spot.peripheral.Spot;
 import com.sun.spot.util.IEEEAddress;
 import com.sun.spot.util.Queue;
 import com.sun.spot.util.Utils;
@@ -34,8 +35,8 @@ import com.sun.squawk.VM;
  */
 final class MACLayer extends MACBase implements I802_15_4_MAC {
 
-    static final int DEFAULT_MAX_CSMA_BACKOFFS = 5; // was 4;
-    private static final int MAC_ACK_WAIT_DURATION = 10;
+    static final int DEFAULT_MAX_CSMA_BACKOFFS = 5;         // was 4;
+    private static final int MAC_ACK_WAIT_DURATION = 20;    // 10 was too short a time
 
     private int[] RETRY_WAITS;
     private int macMinBE = 0;    // was 3; // use 0 so no initial wait before transmitting
@@ -45,6 +46,7 @@ final class MACLayer extends MACBase implements I802_15_4_MAC {
 
     MACLayer(I802_15_4_PHY r) {
         physical = r;
+        ticksPerMillisecond = Spot.getInstance().getTicksPerMillisecond();
         RETRY_WAITS = new int[A_MAX_FRAME_RETRIES];
         RETRY_WAITS[0] = 10;  // was 0;
         RETRY_WAITS[1] = 50;
@@ -214,7 +216,7 @@ final class MACLayer extends MACBase implements I802_15_4_MAC {
     protected void validateDestAddr(RadioPacket recvPacket) throws MACException {
         long addr = recvPacket.getDestinationAddress();
         if (addr != extendedAddress && addr != 0xFFFF) {
-            throw new MACException("Received rp with dest = " + recvPacket.getDestinationAddress());
+            throw new MACException("Received rp with dest = " + IEEEAddress.toDottedHex(addr));
         }
     }
 
@@ -229,9 +231,13 @@ final class MACLayer extends MACBase implements I802_15_4_MAC {
      * @see com.sun.squawk.peripheral.radio.MACBase#setIEEEAddress()
      */
     protected void setIEEEAddress() {
-        IEEEAddress address = new IEEEAddress(System.getProperty("IEEE_ADDRESS"));
-        extendedAddress = address.asLong();
-        Utils.log("My IEEE address is " + address);
+        String address = System.getProperty("IEEE_ADDRESS");
+        try {
+            extendedAddress = IEEEAddress.toLong(address);
+            Utils.log("My IEEE address is " + address);
+        } catch (IllegalArgumentException iex) {
+            System.err.println("Error reading IEEE address: " + iex.getMessage());
+        }
     }
 
     protected void disableRx() {

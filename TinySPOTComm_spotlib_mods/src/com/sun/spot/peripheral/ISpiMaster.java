@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -23,6 +23,8 @@
  */
 
 package com.sun.spot.peripheral;
+
+import com.sun.spot.resources.IResource;
 
 /**
  * Interface to the SPI master controller.
@@ -65,7 +67,7 @@ package com.sun.spot.peripheral;
  * <p>
  * @see <a href="http://www.atmel.com/dyn/resources/prod_documents/doc1354.pdf">AT91 Spec</a>
 */
-public interface ISpiMaster {
+public interface ISpiMaster extends IResource {
 	/**
 	 * The inactive state value of SPCK is logic level one
 	 */
@@ -143,7 +145,8 @@ public interface ISpiMaster {
 	/**
 	 * 1 MHz clock rate
 	 */
-	public static final int CSR_SCBR_1MHZ = 30 << 8;
+	public static final int CSR_SCBR_1MHZ  = 30 << 8;
+	public static final int CSR_SCBR8_1MHZ = 67 << 8;
 	/**
 	 * 2 MHz clock rate
 	 */
@@ -160,6 +163,7 @@ public interface ISpiMaster {
 	 * 250 KHz clock rate
 	 */
 	public static final int CSR_SCBR_250K = 120 << 8;
+	public static final int CSR_SCBR_MIN = 255 << 8;
 
 	/**
 	 * Bit mask for field that controls the delay before the transfer starts after CS goes active.
@@ -189,6 +193,7 @@ public interface ISpiMaster {
 	 * Select a value of 50 (26.6us) for DLYBCT
 	 */
 	public static final int CSR_DLYBCT_50 = 50 << 24;
+	public static final int CSR_DLYBCT_64 = 64 << 24;
 	/**
 	 * Select a value of 100 (53.3us) for DLYBCT
 	 */
@@ -197,6 +202,7 @@ public interface ISpiMaster {
 	 * Select a value of 200 (106.6us) for DLYBCT
 	 */
 	public static final int CSR_DLYBCT_200 = 200 << 24;
+	public static final int CSR_DLYBCT_MAX = 255 << 24;
 
 	/**
 	 * SPI send of 8 bits, plus simultaneous receive of 8 bits
@@ -279,6 +285,15 @@ public interface ISpiMaster {
 			byte[] subsequent, PIOPin fifo_pin);
 
 	/**
+	 * Pulse SPI specified chip select line
+	 *
+	 * @param pcs SPI Peripheral Chip Select to use
+	 * @param deviceAddress Board device address to use
+	 * @param dur Pulse time in microseconds
+	 */
+	public abstract void pulse(SpiPcs pcs, int deviceAddress, int dur);
+
+    /**
 	 * Allows the loopback feature to be turned on and off. Loopback is useful for testing.
 	 * @param b true to turn loopback on, false to turn it off
 	 */

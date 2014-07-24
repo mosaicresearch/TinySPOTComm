@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -24,13 +24,15 @@
 
 package com.sun.spot.peripheral;
 
+import com.sun.spot.resources.IResource;
+
 
 /**
  * Interface to the AT91 Parallel I/O Controller.
  * 
  * @author Syntropy
  */
-public interface IAT91_PIO {
+public interface IAT91_PIO extends IResource {
 	/**
 	 * Symbols identifying the four PIOs
 	 */

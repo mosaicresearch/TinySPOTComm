@@ -24,78 +24,58 @@
 
 package com.sun.spot.util;
 
-import java.io.*;
-import javax.microedition.io.*;
+import com.sun.spot.service.BootloaderListenerService;
 
-import com.sun.squawk.VM;
+import com.sun.spot.service.IBootloaderListener;
 
 /**
  * Simple class to listen to the serial input over the USB connection and
  * pass control to the bootloader. Means you do not have to push the reset
  * button on the SPOT when downloading new code.
- * 
+ * <p>
  * To use (simplest way):
- * 
- * new BootloaderListener().start();
- * 
+ * <pre>
+ *     new BootloaderListener().start();
+ * </pre>
  * the BootloaderListener will exit the VM when a bootloader command is detected.
- * 
+ * <p>
  * If you want to take your own action:
- * 
+ * <pre>
  * new BootloaderListener(myCallbackObject).start();
- * 
+ * </pre>
  * where myCallbackObject implements {@link com.sun.spot.util.IBootloaderListenerCallback IBootloaderListenerCallback}. 
- *
+ *<p>
  * You can cancel the bootloader listener by calling cancel()
  * 
  * @author Ron Goldman / Syntropy
+ * @deprecated Please use the new BootloaderListenerService directly.
  */
- public class BootloaderListener extends Thread {   // Used to monitor the USB serial line
-        
-    private InputStream in;
-    private boolean runBootLoaderListener = true;
-    private IBootloaderListenerCallback callback = null;
+public class BootloaderListener {   // Used to monitor the USB serial line
+
+    private BootloaderListenerService bls;
 
     public BootloaderListener() {
-        super("BootloaderListener");
+        bls = BootloaderListenerService.getInstance();
     }
     
-    public BootloaderListener(IBootloaderListenerCallback callback) {
-        super("BootloaderListener");
-    	this.callback = callback;
+    public BootloaderListener(final IBootloaderListenerCallback callback) {
+        bls = BootloaderListenerService.getInstance();
+        bls.addBootloaderListener(new IBootloaderListener() {
+            public void prepareToExit() {
+                callback.prepareToExit();
+            }
+        });
+    }
+
+    public void start() {
+        bls.start();
     }
 
     /**
      * Cleanup after ourself and stop running.
      */
     public void cancel() {
-    	runBootLoaderListener = false;
-        try {
-            in.close();
-        } catch (IOException ex) {
-            // ignore any exceptions
-        }
+    	bls.stop();
     }
 
-    /**
-     * Loop reading characters sent over USB connection and dispatch to bootloader when requested.
-     */
-    public void run () {
-        try {
-            in = Connector.openInputStream("serial://");
-
-            while (runBootLoaderListener) {
-                char c = (char)in.read();
-                if ('A' <= c && c <= 'P') {
-                	if (callback != null) {
-                		callback.prepareToExit();
-                	}
-                	System.out.println("Exiting - detected bootloader command");
-                    VM.stopVM(0);         // return control to bootloader
-                }
-            }
-        } catch (IOException ex) {
-            System.err.println("Exception while listening to serial line: " + ex);
-        }
-    }
 }        

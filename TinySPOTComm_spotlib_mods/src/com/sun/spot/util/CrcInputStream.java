@@ -24,6 +24,7 @@
 
 package com.sun.spot.util;
 
+import com.sun.spot.peripheral.radio.RadioFactory;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -124,7 +125,21 @@ class CrcInputStream extends InputStream {
             Utils.writeBigEndInt(rawBytesBuffer, 0, length);
             inData.readFully(rawBytesBuffer, 4, len);
             String stuff = new String(rawBytesBuffer);
-            throw new IOException("Attempt to read unlikely checked byte array size: " + length + ". Raw data follows:\n" + stuff);
+            IOException ex = new IOException("Attempt to read unlikely checked byte array size: " + length +
+                    " [" + Integer.toHexString(length) + "]. Raw data follows:\n" + stuff);
+            if (RadioFactory.isRunningOnHost()) {
+                Utils.sleep(250);
+                len = inData.available();   // see if more is available now
+                if (len > 0) {
+                    rawBytesBuffer = new byte[len + 4];
+                    Utils.writeBigEndInt(rawBytesBuffer, 0, length);
+                    inData.readFully(rawBytesBuffer, 4, len);
+                    stuff = new String(rawBytesBuffer);
+                    System.out.println(stuff);
+                }
+                ex.printStackTrace();
+            }
+            throw ex;
 		} else {
 			if (pendingBuffer != null) {
 				throw new IOException("Received new incoming data before last data was acknowledged");

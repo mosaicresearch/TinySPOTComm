@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -24,29 +24,13 @@
 
 package com.sun.spot.peripheral;
 
+import com.sun.spot.resources.transducers.ITransducer;
+
 /**
  * Represents a simple one-colour LED
+ *
+ * @deprecated Use {@link com.sun.spot.resources.transducers.ILed} instead
  */
-public interface ILed {
+public interface ILed extends com.sun.spot.resources.transducers.ILed {
 	
-    /**
-     * Turn the LED on
-     */
-    public void setOn();
-
-    /**
-     * Turn the LED off
-     */
-    public void setOff();
-    
-    /**
-     * Set the LED's state
-     * @param on true to set the LED on, false to set it off.
-     */
-    public void setOn(boolean on);
-    
-    /**
-     * @return the current state of the LED
-     */
-    public boolean isOn();
 }

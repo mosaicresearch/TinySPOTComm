@@ -1,5 +1,6 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2010 Oracle. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -17,9 +18,9 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA
  * 
- * Please contact Sun Microsystems, Inc., 16 Network Circle, Menlo
- * Park, CA 94025 or visit www.sun.com if you need additional
- * information or have any questions.
+ * Please contact Oracle, 16 Network Circle, Menlo Park, CA 94025 or
+ * visit www.oracle.com if you need additional information or have
+ * any questions.
  */
 
 package com.sun.spot.peripheral.radio;
@@ -28,16 +29,15 @@ import java.io.IOException;
 
 import com.sun.spot.peripheral.ChannelBusyException;
 import com.sun.spot.peripheral.NoAckException;
-import com.sun.spot.peripheral.radio.mhrp.aodv.AODVManager;
+import com.sun.spot.resources.Resources;
 import com.sun.spot.service.BasicService;
-import com.sun.spot.service.ServiceRegistry;
 import java.util.Hashtable;
 import com.sun.spot.util.IEEEAddress;
 import com.sun.spot.util.Queue;
+import java.util.Date;
 import java.util.Enumeration;
 import java.util.Vector;
 //import com.sun.spot.util.Debug;
-
 
 /**
  * Implements {@link com.sun.spot.peripheral.radio.IRadioPacketDispatcher}
@@ -47,6 +47,7 @@ import java.util.Vector;
  * 
  */
 public class RadioPacketDispatcher extends BasicService implements IRadioPacketDispatcher {
+
     private static final int MAX_PACKETS_QUEUED = 200;
     private ILowPan lowPan;
     private static IRadioPacketDispatcher theRPD;
@@ -56,6 +57,7 @@ public class RadioPacketDispatcher extends BasicService implements IRadioPacketD
     private PacketQualityForwarderThread packetFwdThread;
     private Vector packetListener;
     private Queue packetQueue;
+
     /**
      * Return the singleton instance of RadioPacketDispatcher.
      *
@@ -63,11 +65,12 @@ public class RadioPacketDispatcher extends BasicService implements IRadioPacketD
      */
     public synchronized static IRadioPacketDispatcher getInstance() {
         if (theRPD == null) {
-            theRPD = (RadioPacketDispatcher) ServiceRegistry.getInstance().lookup(RadioPacketDispatcher.class);
+            theRPD = (RadioPacketDispatcher) Resources.lookup(RadioPacketDispatcher.class);
             if (theRPD == null) {
                 theRPD = new RadioPacketDispatcher(RadioFactory.getI802_15_4_MACs(), RadioFactory.getRadioPolicyManager());
                 RadioFactory.setProperty("IEEE_ADDRESS", IEEEAddress.toDottedHex(RadioFactory.getRadioPolicyManager().getIEEEAddress()));
-                ServiceRegistry.getInstance().add((RadioPacketDispatcher)theRPD);
+                theRPD.addTag("service=" + theRPD.getServiceName());
+                Resources.add((RadioPacketDispatcher) theRPD);
             }
         }
         return theRPD;
@@ -76,7 +79,7 @@ public class RadioPacketDispatcher extends BasicService implements IRadioPacketD
     public String getServiceName() {
         return "RadioPacketDispatcher";
     }
-    
+
     private RadioPacketDispatcher(I802_15_4_MAC[] macs, IRadioPolicyManager radioPolicyManager) {
         macTable = new Hashtable();
         macList = new MACDescriptor[macs.length];
@@ -84,10 +87,12 @@ public class RadioPacketDispatcher extends BasicService implements IRadioPacketD
         packetQueue = new Queue();
         this.rpm = radioPolicyManager;
 
-        for (int i=0; i<macs.length; i++) {
+        for (int i = 0; i < macs.length; i++) {
             macList[i] = new MACDescriptor(macs[i], macs[i].mlmeGet(I802_15_4_MAC.A_EXTENDED_ADDRESS));
         }
+        addTag("service=" + getServiceName());
     }
+
     /**
      * Register to be notified with Link Quality information.
      * @param packetListener the class that wants to be called back
@@ -95,6 +100,7 @@ public class RadioPacketDispatcher extends BasicService implements IRadioPacketD
     public void registerPacketQualityListener(IPacketQualityListener packetListener) {
         addPacketQualityListener(packetListener);
     }
+
     /**
      * Undo a previous call of registerPacketListener()
      * @param listener the class that wants to be deregistered
@@ -119,9 +125,12 @@ public class RadioPacketDispatcher extends BasicService implements IRadioPacketD
      * Undo a previous call of registerPacketListener()
      * @param listener the class that wants to be deregistered
      */
-    public void removePacketQualityListener(IPacketQualityListener listener){
+    public void removePacketQualityListener(IPacketQualityListener listener) {
         this.packetListener.removeElement(listener);
-        if (this.packetListener.isEmpty()) packetFwdThread = null;
+        if (this.packetListener.isEmpty() && packetFwdThread != null) {
+            packetFwdThread.quit();
+            packetFwdThread = null;
+        }
     }
 
     /**
@@ -131,30 +140,38 @@ public class RadioPacketDispatcher extends BasicService implements IRadioPacketD
      * @throws ChannelBusyException
      */
     public void sendBroadcast(RadioPacket rp) throws NoAckException, ChannelBusyException {
-        
+
         // Iterate over the list of Macs and send the packet on each
-        for (int i=0; i<macList.length; i++) {
-            
+        for (int i = 0; i < macList.length; i++) {
+
             rp.setDestinationPanID(rpm.getPanId());
             rp.setSourceAddress(macList[i].getOurAddress());
-            
+
             //Debug.print("sendPacket: sending packet from "
             //+ IEEEAddress.toDottedHex(rp.getSourceAddress()) +" to "
             //+ IEEEAddress.toDottedHex(rp.getDestinationAddress()), 1);
-            
-            int result;
-            result = macList[i].getMacDevice().mcpsDataRequest(rp);
-            
-            if (result != I802_15_4_MAC.SUCCESS) {
-                if (result == I802_15_4_MAC.NO_ACK) {
-                    throw new NoAckException("No ack");
-                } else if (result == I802_15_4_MAC.CHANNEL_ACCESS_FAILURE) {
-                    throw new ChannelBusyException("Channel busy");
+
+            int result = 0;
+
+            try {
+                result = macList[i].getMacDevice().mcpsDataRequest(rp);
+                if (result == I802_15_4_MAC.SUCCESS && rp.getDestinationAddress() != 0xFFFF) {
+                    return;
                 }
+            } catch (Exception ex) {
+                if (macList.length == 1) {      // only one MAC, so complain
+                    System.out.println("[sendBroadcast] Error sending to MAC " + IEEEAddress.toDottedHex(macList[i].getOurAddress()));
+                    ex.printStackTrace();
+                } else {
+                    // ignore any problems with this MAC and just go on to try the next one
+                }
+            }
+            if (result == I802_15_4_MAC.CHANNEL_ACCESS_FAILURE && macList.length == 1) {
+                throw new ChannelBusyException("Channel busy");
             }
         }
     }
-    
+
     /**
      * Send a packet. Is called by the low pan layer
      * @param rp
@@ -163,21 +180,21 @@ public class RadioPacketDispatcher extends BasicService implements IRadioPacketD
      */
     public void sendPacket(RadioPacket rp) throws NoAckException, ChannelBusyException {
         //   System.out.println("[RPD] Sending packet to: " + IEEEAddress.toDottedHex(rp.getDestinationAddress()));
-        MACDescriptor macDesc = (MACDescriptor)macTable.get(new Long(rp.getDestinationAddress()));
+        MACDescriptor macDesc = (MACDescriptor) macTable.get(new Long(rp.getDestinationAddress()));
         if (macDesc == null) {
             //       System.out.println("[RPD] Sending a broadcast");
             sendBroadcast(rp);
         } else {
             rp.setDestinationPanID(rpm.getPanId());
             rp.setSourceAddress(macDesc.getOurAddress());
-            
+
 //                System.out.println("sendPacket: sending packet from "
 //                + IEEEAddress.toDottedHex(rp.getSourceAddress()) +" to "
 //                + IEEEAddress.toDottedHex(rp.getDestinationAddress()));
-            
+
             int result;
             result = macDesc.getMacDevice().mcpsDataRequest(rp);
-            
+
             if (result != I802_15_4_MAC.SUCCESS) {
                 if (result == I802_15_4_MAC.NO_ACK) {
                     throw new NoAckException("No ack");
@@ -191,7 +208,21 @@ public class RadioPacketDispatcher extends BasicService implements IRadioPacketD
                 packetQueue.put(rp); // If anyone is listening, queue the packet
             }
         }
+    }
 
+    /**
+     * Get the MAC associated with the specified address.
+     * 
+     * @param address to lookup
+     * @return the I802_15_4_MAC associated with the address
+     */
+    public I802_15_4_MAC getMAC(long address) {
+        MACDescriptor macDesc = (MACDescriptor) macTable.get(new Long(address));
+        if (macDesc != null) {
+            return macDesc.macDevice;
+        } else {
+            return null;
+        }
     }
     
     /**
@@ -205,21 +236,22 @@ public class RadioPacketDispatcher extends BasicService implements IRadioPacketD
      */
     public synchronized void initialize(ILowPan lowPanLayer) {
         this.lowPan = lowPanLayer;
-        for (int i=0; i<macList.length; i++) {
+        for (int i = 0; i < macList.length; i++) {
             DispatcherThread dispatcherThread = new DispatcherThread(macList[i]);
             RadioFactory.setAsDaemonThread(dispatcherThread);
             dispatcherThread.start();
         }
     }
-    
+
     private class DispatcherThread extends Thread {
+
         MACDescriptor macDesc;
-        
+
         DispatcherThread(MACDescriptor desc) {
-            super("RadioPacketDispatcher:"+ IEEEAddress.toDottedHex(desc.getOurAddress()));
+            super("RadioPacketDispatcher:" + IEEEAddress.toDottedHex(desc.getOurAddress()));
             this.macDesc = desc;
         }
-        
+
         public void run() {
             /**
              * Internally macLayer copies the contents of an internal radio packet
@@ -229,9 +261,15 @@ public class RadioPacketDispatcher extends BasicService implements IRadioPacketD
                 try {
                     RadioPacket rp = RadioPacket.getDataPacket();
                     macDesc.getMacDevice().mcpsDataIndication(rp);
-                    
+
                     macTable.put(new Long(rp.getSourceAddress()), this.macDesc);
+//                    Date date = new Date(System.currentTimeMillis());
+//                    System.out.println("[RPD] Called Lowpan at " + date);
+
                     lowPan.receive(rp);
+
+//                    date = new Date(System.currentTimeMillis());
+//                    System.out.println("[RPD] Lowpan completed receive at " + date);
                     if (!packetListener.isEmpty()) {
                         if (packetQueue.size() < MAX_PACKETS_QUEUED) {
                             packetQueue.put(rp); // If anyone is listening, queue the packet
@@ -249,61 +287,67 @@ public class RadioPacketDispatcher extends BasicService implements IRadioPacketD
                                 "Exception processing packet");
                         e.printStackTrace();
                     }
-                    
+
                 }
             }
         }
     }
-    
+
     private class MACDescriptor {
+
         private I802_15_4_MAC macDevice;
         private long ourAddress;
-        
-        public MACDescriptor(I802_15_4_MAC mac, long addr){
+
+        public MACDescriptor(I802_15_4_MAC mac, long addr) {
             setMacDevice(mac);
             setOurAddress(addr);
         }
-        
+
         public I802_15_4_MAC getMacDevice() {
-            
+
             return macDevice;
         }
-        
+
         public void setMacDevice(I802_15_4_MAC macDevice) {
             this.macDevice = macDevice;
         }
-        
+
         public long getOurAddress() {
             return ourAddress;
         }
-        
+
         public void setOurAddress(long ourAddress) {
             this.ourAddress = ourAddress;
         }
-        
     }
-    
+
     private class PacketQualityForwarderThread extends Thread {
-        
+
         PacketQualityForwarderThread() {
             super("PacketQualityForwarder");
         }
-        
+        private boolean quit = false;
+
+        public void quit() {
+            quit = true;
+        }
+
         public void run() {
-            while (true) {
+            while (!quit) {
                 RadioPacket rp = null;
                 while (rp == null) {
-                    rp = (RadioPacket)packetQueue.get();
+                    rp = (RadioPacket) packetQueue.get();
                 }
                 // send the packet
                 if (!packetListener.isEmpty()) {
                     Enumeration en = packetListener.elements();
-                    while(en.hasMoreElements()){
-                        ((IPacketQualityListener)en.nextElement()).notifyPacket(rp.getSourceAddress(),
-                                rp.getDestinationAddress(), rp.getRssi(), rp.getCorr(), rp.getLinkQuality(), 
+                    while (en.hasMoreElements()) {
+                        ((IPacketQualityListener) en.nextElement()).notifyPacket(rp.getSourceAddress(),
+                                rp.getDestinationAddress(), rp.getRssi(), rp.getCorr(), rp.getLinkQuality(),
                                 rp.getLength());
                     }
                 }
+                Thread.yield();
             }
         }
     }

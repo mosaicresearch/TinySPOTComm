@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -24,7 +24,9 @@
 
 package com.sun.spot.peripheral;
 
-public interface IDriverRegistry {
+import com.sun.spot.resources.IResource;
+
+public interface IDriverRegistry extends IResource {
 
 	/**
 	 * Add a driver to the registry. The driver will now be informed/asked about deep sleep
@@ -37,4 +39,10 @@ public interface IDriverRegistry {
 	 * @param driver The driver to remove, which must be registered
 	 */
 	void remove(IDriver driver);
+
+    /**
+	 * Display a list of all the registered drivers
+	 */
+	String[] getRegisteredDriverNames();
+
 }

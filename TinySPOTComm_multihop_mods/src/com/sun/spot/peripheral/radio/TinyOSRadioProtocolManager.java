@@ -19,12 +19,10 @@
 */
 package com.sun.spot.peripheral.radio;
 
-import com.sun.spot.interisolate.InterIsolateServer;
 import com.sun.spot.peripheral.ChannelBusyException;
 import com.sun.spot.peripheral.NoAckException;
 import com.sun.spot.peripheral.NoRouteException;
-import com.sun.spot.peripheral.radio.proxy.IRadioServerContext;
-import com.sun.spot.peripheral.radio.proxy.ProxyTinyOSRadioProtocolManager;
+import com.sun.spot.resources.Resources;
 
 /**
  * @author Daniel van den Akker 
@@ -36,7 +34,7 @@ public class TinyOSRadioProtocolManager extends RadioProtocolManager implements 
 	/**
 	 * The number identifying the TinyOS Protocol family.
 	 */
-	public static final byte PROTOCOL_FAMILY_NUMBER = 63; // 0x3f
+	public static final byte PROTOCOL_NUMBER = 63; // 0x3f
 	/**
 	 * The name used by the GCF to identify tinyos connections
 	 */
@@ -49,19 +47,21 @@ public class TinyOSRadioProtocolManager extends RadioProtocolManager implements 
 	{
 		super(lowpan, radioPolicyManager);
 		this.dispatch = dispatch;
-		lowpan.registerProtocolFamily(PROTOCOL_FAMILY_NUMBER, this);
+		lowpan.registerProtocolFamily(PROTOCOL_NUMBER, this);
 	}
 
 	TinyOSRadioProtocolManager()
 	{
 		this(LowPan.getInstance(), RadioFactory.getRadioPolicyManager(), RadioPacketDispatcher.getInstance());
+                //extra
+                lowpan.registerProtocol(PROTOCOL_NUMBER, this);
 	}
 
 	/**
 	 * main method used to add tinyos support for interisolate connections
 	 * @param args SunSPOT args
 	 */
-	public static void main(String[] args)
+/*	public static void main(String[] args)
 	{
 		InterIsolateServer.run(ProxyTinyOSRadioProtocolManager.CHANNEL_IDENTIFIER, new IRadioServerContext()
 		{
@@ -70,7 +70,7 @@ public class TinyOSRadioProtocolManager extends RadioProtocolManager implements 
 				return TinyOSRadioProtocolManager.getInstance();
 			}
 		});
-	}
+	}*/
 
 	/**
 	 * Retrieves the instance of the TinyOSRadioProtocolManager
@@ -81,14 +81,11 @@ public class TinyOSRadioProtocolManager extends RadioProtocolManager implements 
 	{
 		if (theInstance == null)
 		{
-			if (RadioFactory.isMasterIsolate())
-			{
-				theInstance = new TinyOSRadioProtocolManager();
-			}
-			else
-			{
-				theInstance = new ProxyTinyOSRadioProtocolManager(PROTOCOL_FAMILY_NUMBER, PROTOCOL_NAME);
-			}
+                    theInstance = (ITinyOSRadioProtocolManager)Resources.lookup(ITinyOSRadioProtocolManager.class);
+                    if (theInstance == null) {
+                            theInstance = new TinyOSRadioProtocolManager();
+                            Resources.add((TinyOSRadioProtocolManager)theInstance);
+                    }
 		}
 		return theInstance;
 	}
@@ -129,7 +126,7 @@ public class TinyOSRadioProtocolManager extends RadioProtocolManager implements 
 		int payload_size = Math.min(length + 1, packet.getMaxMacPayloadSize()); 
 		//fill radiopacket
 		packet.setMACPayloadLength(payload_size);
-		packet.setMACPayloadAt(0, PROTOCOL_FAMILY_NUMBER); // set protocol family
+		packet.setMACPayloadAt(0, PROTOCOL_NUMBER); // set protocol family
 		System.arraycopy(payload, 0, packet.buffer, packet.getPayloadOffset() + 1, payload_size - 1);
 
 		if(cid.isBroadcast())

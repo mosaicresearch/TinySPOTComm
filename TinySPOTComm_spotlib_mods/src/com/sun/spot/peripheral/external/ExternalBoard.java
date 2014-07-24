@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -36,30 +36,25 @@ import java.util.Hashtable;
 import com.sun.spot.flashmanagement.FlashFileInputStream;
 import com.sun.spot.flashmanagement.FlashFileOutputStream;
 import com.sun.spot.peripheral.*;
+import com.sun.spot.resources.Resource;
 import com.sun.spot.util.Properties;
 import com.sun.squawk.peripheral.INorFlashSector;
 
 /**
  * Represents an external board. Used primarily to manage the properties stored in the serial flash memory
  * of any SPOT external board. Acts as the base class for specific board implemenations.
- * <br>
- * Note: in preparation for using other serial flash chips than the discontinued M25P05
- * this version will only write new properties if the property SERIAL_MEMORY is either
- * not set or has a value of "M25P05".
  */
-public class ExternalBoard implements IExternalBoard {
+public class ExternalBoard extends Resource implements IExternalBoard {
 
     public static final String ID_PROPERTY_NAME = "PART_ID";
-    public static final String MEMORY_PROPERTY_NAME = "SERIAL_MEMORY";
 
     protected static final int BOARD_MAGIC_WORD = 0xFEEDFACE;
 
-    private M25P05 serialFlash = null;
+    private SerialFlash serialFlash = null;
     private PeripheralChipSelect cs_pin;
     private Properties properties = null;
     private String partId = null;
-    private boolean ok2write = true;    // used to prevent trying to write to future boards
-                                        // that use a different serial flash chip
+    private String partId2 = null;
 
     /**
      * Create an interface to the external board
@@ -77,9 +72,14 @@ public class ExternalBoard implements IExternalBoard {
         this.partId = partId;
     }
 
-    private void checkWritable() {
-        String flashChip = properties.getProperty(MEMORY_PROPERTY_NAME);
-        ok2write = flashChip == null || "M25P05".equalsIgnoreCase(flashChip);
+    /**
+     * Create an interface to an external board
+     * @param partId The part id to match against
+     * @param partId2 An alternative part id to match against
+     */
+    protected ExternalBoard(String partId, String partId2) {
+        this.partId = partId;
+        this.partId2 = partId2;
     }
 
     /**
@@ -97,10 +97,8 @@ public class ExternalBoard implements IExternalBoard {
                 if (dis.readLong() == BOARD_MAGIC_WORD) {
                     BoundedInputStream bis = new BoundedInputStream(is);
                     properties.load(bis);
-                    checkWritable();
                 }
             } catch (IOException e) {
-                ok2write = false;       // don't allow writing properties if we can't read them
                 System.err.println("Error reading external board flash memory: " + e.getMessage());
             }
         }
@@ -114,10 +112,6 @@ public class ExternalBoard implements IExternalBoard {
      * @throws IOException
      */
     public void setProperties(Properties p) throws IOException {
-        if (!ok2write) {
-            String flashChip = properties.getProperty(MEMORY_PROPERTY_NAME);
-            throw new IOException("Do not know how to write to serial memory chip: " + flashChip);
-        }
         OutputStream os = new FlashFileOutputStream(new NorFlashSector(getSerialFlash(), 0, INorFlashSector.SYSTEM_PURPOSED));
         DataOutputStream dos = new DataOutputStream(os);
         dos.writeLong(BOARD_MAGIC_WORD);
@@ -135,7 +129,8 @@ public class ExternalBoard implements IExternalBoard {
      */
     public synchronized IFlashMemoryDevice getSerialFlash() {
         if (serialFlash == null) {
-            serialFlash = new M25P05(newBoardDeviceSPI(7, M25P05.SPI_CONFIG));
+            int hwrev = Spot.getInstance().getHardwareType();
+            serialFlash = new SerialFlash(newBoardDeviceSPI(7, (hwrev < 8) ? SerialFlash.SPI_CONFIG : SerialFlash.SPI_CONFIG8));
         }
         return serialFlash;
     }
@@ -184,10 +179,9 @@ public class ExternalBoard implements IExternalBoard {
                 PeripheralChipSelect key = (PeripheralChipSelect) e.nextElement();
                 Properties p = (Properties) map.get(key);
                 String id = (String) p.get(ID_PROPERTY_NAME);
-                if (partId.equals(id)) {
+                if (partId.equals(id) || (partId2 != null && partId2.equals(id))) {
                     cs_pin = key;
                     properties = p;
-                    checkWritable();
                     break;
                 }
             }
@@ -203,11 +197,16 @@ public class ExternalBoard implements IExternalBoard {
      * @return true if this board is physically present
      */
     public boolean isInstalled() {
-        getSerialFlash(); // to make sure field is initialized
-        return (serialFlash.getStatusReg() & 0x71) == 0;
+        try {
+            getSerialFlash(); // to make sure field is initialized
+            return true; // (serialFlash.getStatusReg() & 0x71) == 0;
+        } catch (SpotFatalException ex) {
+            // System.out.println("External board not installed");
+            return false;
+        }
     }
 
     public int getBoardIndex() {
-        return getChipSelect() == PeripheralChipSelect.SPI_PCS_BD_SEL1 ? 0 : 1;
+        return getChipSelect() == PeripheralChipSelect.SPI_PCS_BD_SEL1() ? 0 : 1;
     }
 }

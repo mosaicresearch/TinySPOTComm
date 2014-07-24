@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -24,11 +24,12 @@
 
 package com.sun.spot.peripheral;
 
+import com.sun.spot.resources.Resource;
 import com.sun.spot.util.Utils;
 import com.sun.squawk.*;
 import com.sun.squawk.vm.*;
 
-class SleepManager extends Thread implements ISleepManager {
+class SleepManager extends Resource implements ISleepManager, Runnable {
 
     /**
      *
@@ -58,6 +59,7 @@ class SleepManager extends Thread implements ISleepManager {
     private UnableToDeepSleepException deepSleepException;
     private Thread ensureDeepSleepThread;
     private SoakThread soakThread;
+    private Thread ourThread;
     private long startTime;
     private long totalDeepSleepTime = 0;
     private long totalSimulatedDeepSleep = 0;
@@ -97,7 +99,6 @@ class SleepManager extends Thread implements ISleepManager {
     }
 
     public SleepManager(DriverRegistry registry, IUSBPowerDaemon usbPowerDaemon, IPowerController powerController, int hardwareType) {
-        super("SleepManager");
         this.driverRegistry = registry;
         this.usbPowerDaemon = usbPowerDaemon;
         this.powerController = powerController;
@@ -112,9 +113,10 @@ class SleepManager extends Thread implements ISleepManager {
         VM.setAsDaemonThread(soakThread);
         soakThread.start();
 
-        VM.setSystemThreadPriority(this, VM.MAX_SYS_PRIORITY);
-        VM.setAsDaemonThread(this);
-        this.start();
+        ourThread = new Thread(this, "SleepManager");
+        VM.setSystemThreadPriority(ourThread, VM.MAX_SYS_PRIORITY);
+        VM.setAsDaemonThread(ourThread);
+        ourThread.start();
     }
 
     public void run() {

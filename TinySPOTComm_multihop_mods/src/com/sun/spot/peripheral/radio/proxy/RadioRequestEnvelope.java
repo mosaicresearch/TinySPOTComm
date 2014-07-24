@@ -28,6 +28,9 @@ import com.sun.spot.interisolate.ReplyEnvelope;
 import com.sun.spot.interisolate.RequestEnvelope;
 import com.sun.spot.peripheral.radio.IRadioProtocolManager;
 
+/**
+ * @deprecated No longer needed: all Isolates now use a global radio resource.
+ */
 abstract class RadioRequestEnvelope extends RequestEnvelope {
 	
 	public ReplyEnvelope execute(Object context) throws Exception {

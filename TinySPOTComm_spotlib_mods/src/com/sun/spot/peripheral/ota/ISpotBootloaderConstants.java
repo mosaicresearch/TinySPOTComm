@@ -42,15 +42,18 @@ public interface ISpotBootloaderConstants {
 	static final char READ_SECTOR_CMD				= 'O';
 	
 	static final char FLASH_BOOTLOAD_CMD			= 'P';
+	static final char GET_HW_REV_CMD                = 'Q';
 	
 	static final char BOOTLOADER_SYNC 				= 's';
 	static final char OLD_BOOTLOADER_SYNC 		    = 'S';
-	
+
+        static final char REV8_IDENTIFIER                   = '8';
+        
 	static final char WRITE_SECTOR_CMD				= 'V';
 	static final char NO_OPERATION_CMD				= 'X';
 		
-	static final String BOOTLOADER_CMD_HEADER = "*EL*";
-	static final String ABORT_REQUEST = BOOTLOADER_CMD_HEADER + ":A";
+	static final String BOOTLOADER_CMD_HEADER     = "*EL*";
+	static final String ABORT_REQUEST     = BOOTLOADER_CMD_HEADER     + ":A";
 	
 	static final byte[] BOOTLOADER_CMD_PREFIX = new byte[] {'$', '@', '#', '%'};
 

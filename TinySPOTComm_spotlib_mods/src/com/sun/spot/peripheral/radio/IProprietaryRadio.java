@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -24,13 +24,15 @@
 
 package com.sun.spot.peripheral.radio;
 
+import com.sun.spot.resources.IResource;
+
 
 /**
  * This interface represents the parts of the CC2420's functionality that are not  
  * exposed by the I802.15.4 PHY layer but are still useful. Some of these are required
  * for the current I802.15.4 MAC layer implementation.
  */
-public interface IProprietaryRadio {
+public interface IProprietaryRadio extends IResource {
 	
 	/**
 	 * Default output power setting.

@@ -52,7 +52,7 @@ public class TinyOSPacket implements Datagram
 {
 
 	/**
-	 * Maximum nuber of bytes that can be stored in a packet. Data must fit into a single 802.15.4 packet, minus 2 bytes: 1 for lowpan 1 for multiplexing
+	 * Maximum number of bytes that can be stored in a packet. Data must fit into a single 802.15.4 packet, minus 2 bytes: 1 for lowpan 1 for multiplexing
 	 */
 	// -9: account for 16-bit addressed MAC header, -2 account for lowpan + multiplexing byte
 	public static final int MAX_LENGTH = RadioPacket.MAX_DATA_LENGTH - 9 - 1 - ITinyOSRadioProtocolManager.DATA_OFFSET;
@@ -487,6 +487,10 @@ public class TinyOSPacket implements Datagram
 	{
 		return timestamp;
 	}
+        
+        public boolean isBroadcast() {
+           return headerInfo.destinationAddress == 0xFFFF;
+        }
 
 	void send() throws NoAckException, ChannelBusyException, NoRouteException, NoMeshLayerAckException
 	{

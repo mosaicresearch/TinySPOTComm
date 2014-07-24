@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -84,7 +84,7 @@ class AT91_AIC implements IAT91_AIC {
 	 * @param mode word to write into AIC_SMR
 	 */
 	public void configure(int irq, int pri, int mode) {
-		if ((IAT91_Peripherals.PERIPHERALS_ACCESSIBLE_FROM_JAVA & irq) == 0) {
+		if ((Spot.getInstance().getAT91_Peripherals().PERIPHERALS_ACCESSIBLE_FROM_JAVA & irq) == 0) {
 			throw new SpotFatalException("The peripheral with irq mask " + irq + " is not accessible from Java");
 		}
 		
@@ -156,7 +156,7 @@ class AT91_AIC implements IAT91_AIC {
 	}
 
 	private int getEnabledInterrupts() {
-		return Unsafe.getInt(AIC_BASE_ADDR, AIC_IMR) & IAT91_Peripherals.PERIPHERALS_ACCESSIBLE_FROM_JAVA;
+		return Unsafe.getInt(AIC_BASE_ADDR, AIC_IMR) & Spot.getInstance().getAT91_Peripherals().PERIPHERALS_ACCESSIBLE_FROM_JAVA;
 	}
 
 }

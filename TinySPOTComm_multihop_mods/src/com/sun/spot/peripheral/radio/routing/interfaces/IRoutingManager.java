@@ -21,7 +21,6 @@
  * Park, CA 94025 or visit www.sun.com if you need additional
  * information or have any questions.
  */
-
 package com.sun.spot.peripheral.radio.routing.interfaces;
 
 import com.sun.spot.peripheral.NoRouteException;
@@ -37,6 +36,7 @@ import com.sun.spot.service.IService;
  * @version 0.1
  */
 public interface IRoutingManager extends IService {
+
     /**
      * for the initialization the routing manager must know a low pan instance
      * to interoperate with
@@ -44,26 +44,30 @@ public interface IRoutingManager extends IService {
      * @param lowPanLayer
      */
     public void initialize(long ourAddress, ILowPan lowPanLayer);
+
     /**
      * this method can be called to obtain a route info for an address
      * @param address
      */
     public RouteInfo getRouteInfo(long address);
+
     /**
      * This method triggers a new route request. 
      * Note: the radio must be on or no route will be found.
      */
-    public boolean findRoute(long address, RouteEventClient eventClient, Object uniqueKey) 
-    throws NoRouteException ;
+    public boolean findRoute(long address, RouteEventClient eventClient, Object uniqueKey)
+            throws NoRouteException;
+
     /**
      * returns a copy of the routing table
      */
     public RouteTable getRoutingTable();
+
     /**
      * invalidate a route that is reported to be broken
      */
     public boolean invalidateRoute(long originator, long destination);
- 
+
     /**
      * Registers an application etc. that is notified when this node
      * initiates/receives supported route events
@@ -96,4 +100,11 @@ public interface IRoutingManager extends IService {
      */
     public void removeEventListener(IMHEventListener listener);
 
+    
+    /**
+     * Return the maximum number of hops a packet may take in this mesh network
+     * 
+     * @return the maximum number of hops across this network
+     */
+    public int getMaximumHops();
 }

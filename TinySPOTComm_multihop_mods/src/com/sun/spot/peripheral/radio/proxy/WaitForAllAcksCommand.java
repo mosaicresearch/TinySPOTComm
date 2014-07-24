@@ -30,6 +30,9 @@ import com.sun.spot.peripheral.radio.ConnectionID;
 import com.sun.spot.peripheral.radio.IRadioProtocolManager;
 import com.sun.spot.peripheral.radio.IRadiostreamProtocolManager;
 
+/**
+ * @deprecated No longer needed: all Isolates now use a global radio resource.
+ */
 public class WaitForAllAcksCommand extends RadioRequestEnvelope {
 
 	private ConnectionID cid;

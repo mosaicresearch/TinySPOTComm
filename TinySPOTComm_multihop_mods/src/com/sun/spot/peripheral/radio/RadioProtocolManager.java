@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -27,10 +27,11 @@ package com.sun.spot.peripheral.radio;
 import java.util.Hashtable;
 
 import com.sun.spot.peripheral.SpotFatalException;
+import com.sun.spot.resources.Resource;
 import com.sun.spot.util.IEEEAddress;
 import com.sun.spot.util.Utils;
 
-public abstract class RadioProtocolManager implements IRadioProtocolManager {
+public abstract class RadioProtocolManager extends Resource implements IRadioProtocolManager {
 	static final byte CTRL_NEW_CONN = 1;
 
 	IRadioPolicyManager radioPolicyManager;

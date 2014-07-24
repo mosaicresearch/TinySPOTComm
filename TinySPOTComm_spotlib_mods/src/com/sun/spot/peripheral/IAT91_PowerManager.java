@@ -66,12 +66,7 @@ public interface IAT91_PowerManager extends IDriver {
 	 * Speed of the peripheral bus in each of the shallow sleep modes.
 	 * For example {@link #PERIPHERAL_BUS_SPEEDS}[{@link #SHALLOW_SLEEP_CLOCK_MODE_18_MHZ}]
 	 */
-	int[] PERIPHERAL_BUS_SPEEDS = new int[] {
-			ISpot.MCLK_FREQUENCY,
-			ISpot.MCLK_FREQUENCY*3/4,
-			18432000,
-			18432000/2
-	};
+	int[] PERIPHERAL_BUS_SPEEDS = new int[4];
 
 	/**
 	 * Enable the clocks for peripherals whose bits are set in the mask.

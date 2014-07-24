@@ -1,5 +1,6 @@
 /*
  * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2010 Oracle. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -17,14 +18,17 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA
  * 
- * Please contact Sun Microsystems, Inc., 16 Network Circle, Menlo
- * Park, CA 94025 or visit www.sun.com if you need additional
- * information or have any questions.
+ * Please contact Oracle, 16 Network Circle, Menlo Park, CA 94025 or
+ * visit www.oracle.com if you need additional information or have
+ * any questions.
  */
 
 package com.sun.spot.io.j2me.remoteprinting;
 
-public interface IRemotePrintManager {
+import com.sun.spot.resources.IResource;
+import java.io.OutputStream;
+
+public interface IRemotePrintManager extends IResource {
 
 	/**
 	 * Start directing output streams to the basestation specified
@@ -44,4 +48,8 @@ public interface IRemotePrintManager {
 	 * @param remoteAddress
 	 */
 	void noteRedirection(String remoteAddress);
+
+
+    public OutputStream openOutputStream(String address, int portNo);
+    
 }

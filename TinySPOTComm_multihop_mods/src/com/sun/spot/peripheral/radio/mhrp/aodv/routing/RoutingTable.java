@@ -1,5 +1,6 @@
 /*
  * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2010 Oracle. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -17,9 +18,9 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA
  * 
- * Please contact Sun Microsystems, Inc., 16 Network Circle, Menlo
- * Park, CA 94025 or visit www.sun.com if you need additional
- * information or have any questions.
+ * Please contact Oracle, 16 Network Circle, Menlo Park, CA 94025 or
+ * visit www.oracle.com if you need additional information or have
+ * any questions.
  */
 
 package com.sun.spot.peripheral.radio.mhrp.aodv.routing;
@@ -33,6 +34,8 @@ import com.sun.spot.peripheral.radio.routing.SortedList;
 import com.sun.spot.peripheral.radio.mhrp.aodv.Constants;
 import com.sun.spot.peripheral.radio.mhrp.aodv.messages.RREP;
 import com.sun.spot.peripheral.radio.mhrp.aodv.messages.RREQ;
+import com.sun.spot.resources.Resource;
+import com.sun.spot.resources.Resources;
 import com.sun.spot.util.Debug;
 import com.sun.spot.util.IEEEAddress;
 
@@ -41,7 +44,7 @@ import com.sun.spot.util.IEEEAddress;
  * @author Allen Ajit George, Jochen Furtmueller
  * @version 0.1
  */
-public class RoutingTable {
+public class RoutingTable extends Resource {
     
     private final Hashtable table;
     private final SortedList timeoutList;
@@ -76,7 +79,11 @@ public class RoutingTable {
      */
     public synchronized static RoutingTable getInstance() {
         if (instance == null) {
-            instance = new RoutingTable();
+            instance = (RoutingTable) Resources.lookup(RoutingTable.class);
+            if (instance == null) {
+                instance = new RoutingTable();
+                Resources.add(instance);
+            }
         }
         return instance;
     }

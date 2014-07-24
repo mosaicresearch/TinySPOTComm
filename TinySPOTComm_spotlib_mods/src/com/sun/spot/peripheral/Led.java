@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -24,13 +24,15 @@
 
 package com.sun.spot.peripheral;
 
+import com.sun.spot.resources.Resource;
+import com.sun.spot.resources.transducers.SensorEvent;
 
 /**
  * Class that implements the behaviour of simple LEDs, as found on the Spot board and the testboard.<br><br>
  * 
  * This class is not for general use. Access LEDs via the Spot or TestBoard classes.
  */
-class Led implements ILed, IDriver { 
+class Led extends Resource implements ILed, IDriver {
 
     private PIOPin pin;
     // SENSE = true means AT91_PIO.SET_OUT turns the LED on
@@ -91,4 +93,23 @@ class Led implements ILed, IDriver {
 	public boolean isOn() {
 		return isOn;
 	}
+
+    public String getDescription() {
+        return "Simple LED";
+    }
+
+    public double getMaxSamplingRate() {
+        return 0;
+    }
+
+    public SensorEvent createSensorEvent() {
+        SensorEvent evt = new SensorEvent(this);
+        return evt;
+    }
+
+    public void saveEventState(SensorEvent evt) {
+        // no local state to save
+        evt.setTime();
+    }
+
 }

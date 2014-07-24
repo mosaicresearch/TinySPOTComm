@@ -37,6 +37,9 @@ import com.sun.spot.peripheral.radio.IRadioProtocolManager;
 import com.sun.spot.peripheral.radio.IncomingData;
 import com.sun.squawk.io.mailboxes.NoSuchMailboxException;
 
+/**
+ * @deprecated No longer needed: all Isolates now use a global radio resource.
+ */
 public class ProxyRadioProtocolManager implements IRadioProtocolManager {
 	protected RequestSender requestSender;
 

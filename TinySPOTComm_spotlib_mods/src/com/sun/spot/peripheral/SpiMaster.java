@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -24,13 +24,16 @@
 
 package com.sun.spot.peripheral;
 
+import com.sun.spot.resources.Resource;
 import com.sun.squawk.Address;
 import com.sun.squawk.Unsafe;
 import com.sun.squawk.VM;
 import com.sun.squawk.vm.ChannelConstants;
 
-class SpiMaster implements ISpiMaster {
+class SpiMaster extends Resource implements ISpiMaster {
 	private static final Address BASE_ADDRESS = Address.fromPrimitive(0xFFFE0000);
+	private static final Address BASE_ADDRESS8_0 = Address.fromPrimitive(0xFFFC8000);
+	private static final Address BASE_ADDRESS8_1 = Address.fromPrimitive(0xFFFCC000);
 
 	private static final int SPI_MR				= 4>>2;
 	private static final int LOOPBACK_ENABLE	= 1<<7;
@@ -70,6 +73,12 @@ class SpiMaster implements ISpiMaster {
 				pcs.getPcsIndex(), pcs.getConfiguration(), first, fifo_pin.pin, fifo_pin.pio.getBaseAddress(), 0, null, subsequent);
 	}
 
+	public void pulse(SpiPcs pcs, int deviceAddress, int dur) {
+        VM.execSyncIO(ChannelConstants.SPI_PULSE_WITH_DEVICE_SELECT,
+                pcs.getPcsIndex(), deviceAddress, dur, 0, 0, 0, null, null);
+    }
+
+
 	/* (non-Javadoc)
 	 * @see com.sun.squawk.peripheral.spot.IDriver#name()
 	 */
@@ -81,11 +90,20 @@ class SpiMaster implements ISpiMaster {
 	 * @see com.sun.squawk.peripheral.spot.ISpiMaster#setLoopback(boolean)
 	 */
 	public void setLoopback(boolean loopback) {
-		int mode = Unsafe.getInt(BASE_ADDRESS, SPI_MR);
+        if (Spot.getInstance().getHardwareType() < 8) {
+            setLoopbackAux(BASE_ADDRESS, loopback);
+        } else {
+            setLoopbackAux(BASE_ADDRESS8_0, loopback);
+            setLoopbackAux(BASE_ADDRESS8_1, loopback);
+        }
+    }
+
+    private void setLoopbackAux(Address base, boolean loopback) {
+		int mode = Unsafe.getInt(base, SPI_MR);
 		if (loopback) {
-			Unsafe.setInt(BASE_ADDRESS, SPI_MR, mode | LOOPBACK_ENABLE);
+			Unsafe.setInt(base, SPI_MR, mode | LOOPBACK_ENABLE);
 		} else {
-			Unsafe.setInt(BASE_ADDRESS, SPI_MR, mode & ~LOOPBACK_ENABLE);			
+			Unsafe.setInt(base, SPI_MR, mode & ~LOOPBACK_ENABLE);
 		}
 	}
 

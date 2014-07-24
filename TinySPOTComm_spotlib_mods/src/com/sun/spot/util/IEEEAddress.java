@@ -30,7 +30,16 @@ public class IEEEAddress {
 	
 	private static final char[] hexDigits = new char[] {'0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F'};
 
-	private long address;
+////////////////////////////////Modification///////////////////////////////////////////////////////////////////////////////////////////
+                /**
+         * The Prefix used to reconstruct the original address from the 16bit hash
+         */
+        public static final long HASH_PREFIX = 0x00144F0100000000l;
+
+        public static final String MAC_PREFIX = "0014.4F01.0000."; 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        
+        private long address;
 	
 	/**
 	 * Convert a numeric address into a dotted-hex string
@@ -137,4 +146,110 @@ public class IEEEAddress {
 		}
 		return result;
 	}
+        
+        
+//////////////////////////////////////////////Modification////////////////////////////////////////////////////////////////////////////////////////        
+        /**
+          * This method translates a long, representing a 64bit IEEE address to it's 16bit representation
+          *
+          * @param orig the original 64 bit address
+          * @return the 16bit representation of the address
+          */
+         public static final short To16Bit(long orig) {
+             //Check for broadcast address: broadcasts may not be translated
+             if (orig == 0xFFFF)
+                 return (short) 0xFFFF;
+             else
+                 return DoTo16BitTranslation(orig);
+         }
+
+         /**
+          * This method does the actual 64 -> 16 bit translation and is to be provided by the implementing subclass.
+          *
+          * @param orig - the original 16 bit address. This address may not be the broadcast address.
+          * @return - the 64 bit representation of the 16 bit address
+          */
+         protected static short DoTo16BitTranslation(long orig) {
+             return (short) orig;
+         }
+
+         /**
+          * This method translates an IEEEAddress to it's 16bit representation
+          *
+          * @param orig the original 64 bit address
+          * @return the 16bit representation of the address
+          */
+         public static final short To16Bit(IEEEAddress orig) {
+             return To16Bit(orig.asLong());
+         }
+
+         /**
+          * This method translates a String representation of a 64 IEEE address to it's 16bit representation
+          *
+          * @param orig the original 64 bit address
+          * @return the 16bit representation of the address
+          */
+         public static final short To16Bit(String orig) {
+             return To16Bit(new IEEEAddress(orig));
+         }
+
+         /**
+          * This method converts a short, representing a 16bit address to it's 64bit counterpart.
+          *
+          * @param orig the original 16bit address
+          * @return the 64 bit address
+          */
+         public static final long To64Bit(short orig) {
+             //Check for broadcast address: broadcasts may not be translated
+             //0xFFFF translates to -1 when casted to short
+             //SunSPOT stack expects broadcasts to always be 16 bit
+             if (orig == -1)
+                 return 0xFFFF;
+             else
+                 return DoTo64BitTranslation(orig);
+         }
+
+         /**
+          * This method does the actual 16 -> 64bit translation and is to be provided by the implementing subclass.
+          *
+          * @param orig - the original 16 bit address. This address may not be the broadcast address
+          * @return - the 64 bit representation of the 16 bit address
+          */
+         protected static long DoTo64BitTranslation(short orig) {
+             return HASH_PREFIX | (long) orig;
+         }
+
+         /**
+          * This method converts an int, representing a 16bit address to it's 64bit counterpart.
+          *
+          * @param orig the original 16bit address
+          * @return the 64 bit address
+          */
+         public static final long To64Bit(int orig) {
+             return To64Bit((short) orig);
+         }
+
+         /**
+          * This method converts a short, representing a 16bit address to
+          * an IEEEAddress
+          *
+          * @param orig the original 16bit address
+          * @return the 64 bit address
+          */
+         public static final IEEEAddress ToIEEEAddress(short orig) {
+             return new IEEEAddress(To64Bit(orig));
+         }
+
+         /**
+          * This method converts an int, representing a 16bit address to
+          * an IEEEAddress
+          *
+          * @param orig the original 16bit address
+          * @return the 64 bit address
+          */
+         public static final IEEEAddress ToIEEEAddress(int orig) {
+             return ToIEEEAddress((short) orig);
+         }
+         
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 }

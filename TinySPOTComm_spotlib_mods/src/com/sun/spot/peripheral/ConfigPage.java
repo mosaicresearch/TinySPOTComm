@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -25,6 +25,7 @@
 package com.sun.spot.peripheral;
 
 import com.sun.spot.flashmanagement.FlashFile;
+import com.sun.spot.peripheral.radio.RadioFactory;
 import com.sun.spot.util.Utils;
 
 /**
@@ -45,35 +46,27 @@ public class ConfigPage {
 
 	private static final String MIDLET_MARKER_STRING = "-MIDlet-";
 
-	public static final int MAX_MANUFACTURING_IMAGE_SIZE     = S29PL_Flash.getCommonSize();
-
 	public static final int FLASH_BASE_ADDRESS 		= 0x10000000;
 	public static final int BOOTLOADER_ADDRESS 		= FLASH_BASE_ADDRESS; // caution: size must equal bootloader_receive_buffer size in flashloader.c
 
-	public static final int FAT_SECTOR_NUMBER		= 5;
-	public static final int FAT_ADDRESS				= S29PL_Flash.getCommonSectorAddress(FAT_SECTOR_NUMBER);
+        public static final int BOOTLOADER_SECTOR         = 0;
+	public static final int CONFIG_PAGE_SECTOR        = 4;
+	public static final int FAT_SECTOR      		  = 5;
+	public static final int SYSTEM_PROPERTIES_SECTOR  = 6;
+	public static final int TRUST_MANAGER_SECTOR 	  = 7;
 	
 	// NOTE if you move the VM you need to change link-flash.dat
-	public static final int VM_SECTOR_NUMBER		= 8;
-	public static final int VM_ADDRESS 				= S29PL_Flash.getCommonSectorAddress(VM_SECTOR_NUMBER);
+	public static final int VM_SECTOR       		  = 8;
 
 	// NOTE if you move the bootstrap you need to change the cmd line params in default.properties
-	public static final int BOOTSTRAP_SECTOR		= 12;
-	public static final int BOOTSTRAP_ADDRESS 	    = S29PL_Flash.getCommonSectorAddress(BOOTSTRAP_SECTOR);
+	public static final int BOOTSTRAP_SECTOR		  = 12;
 
-	public static final int FIRST_FILE_SYSTEM_SECTOR= 20;
-	public static final int FIRST_FILE_SYSTEM_SECTOR_ADDRESS = S29PL_Flash.getCommonSectorAddress(FIRST_FILE_SYSTEM_SECTOR);
-	public static final int LAST_COMMON_FILE_SYSTEM_SECTOR = S29PL_Flash.getCommonLastLargeSector(); // Last file system sector in smallest S29PL
-	public static final int LAST_COMMON_FILE_SYSTEM_SECTOR_ADDRESS = S29PL_Flash.getCommonSectorAddress(LAST_COMMON_FILE_SYSTEM_SECTOR);
-	
-	public static final int TRUST_MANAGER_SECTOR 	= 7;
-	public static final int SYSTEM_PROPERTIES_SECTOR= 6;
-	public static final int CONFIG_PAGE_SECTOR      = 4;
-	public static final int CONFIG_PAGE_ADDRESS 	= S29PL_Flash.getCommonSectorAddress(CONFIG_PAGE_SECTOR);
+	private static final int FIRST_FILE_SYSTEM_SECTOR  = 20;
+	private static final int FIRST_FILE_SYSTEM_SECTOR8 = 20;    // will be 21 when MMU page table is moved to sectors 2+3
 
 	public static final int DEFAULT_SECTOR_COUNT_FOR_RMS = 8; // number of sectors given to RMS by default
 	
-	public static final int LARGE_SECTOR_SIZE		= S29PL_Flash.BIG_SECTOR_SIZE;
+	public static final int LARGE_SECTOR_SIZE		= CFI_Flash.BIG_SECTOR_SIZE;
 
 	public static final String SPOT_SUITE_PROTOCOL_NAME = "spotsuite";
 
@@ -88,32 +81,68 @@ public class ConfigPage {
 	private String cmdLineAdminParams;
 	private boolean wasLoaded;
 	private byte[] publicKey;
+    private int hardwareRev;
+    private String sdkDate;
 
 	
 	public static final int SERIAL_NUMBER_OFFSET				= 0; // long
 	public static final int CONFIG_VERSION_OFFSET				= 8; // short
 	public static final int FLAGS_OFFSET                        = 10;// byte
-	// gap for an unused byte
+    public static final int HARDWARE_REVISION_OFFSET            = 11;// byte
 	public static final int CMD_LINE_PARAMETERS_NORMAL_OFFSET	= 12;// short
 	public static final int CMD_LINE_PARAMETERS_ADMIN_OFFSET	= 14;// short
 	public static final int VM_ADDRESS_OFFSET					= 16;// int
 
 	public static final int PUBLIC_KEY_OFFSET					= 20;// short
-	public static final int STRINGS_OFFSET				        = 22;// start of area used by variable length strings
+	public static final int SDK_DATE_OFFSET                     = 22;// short
+	public static final int STRINGS_OFFSET				        = 24;// start of area used by variable length strings
+	public static final int OLD_STRINGS_OFFSET				    = 22;
 
 	/**
 	 * Maximum size of the config page as stored on device.
 	 */
 	public static final int CONFIG_PAGE_SIZE		= 1024;
-	public static final int CURRENT_CONFIG_VERSION 	= 11;
+	public static final int CURRENT_CONFIG_VERSION 	= 12;
+	public static final int MINIMUM_CONFIG_VERSION 	= 11;
 
-	// if you change the next three lines, don't forget also to change default.properties in sdk-creator-e
+	// if you change the next three lines, don't forget also to change default.properties in sdkresources
 	private static final String VM_PARAMETERS = "-Xboot:268763136 -Xmxnvm:0 -isolateinit:com.sun.spot.peripheral.Spot -dma:1024";
-	public static final String INITIAL_COMMAND_LINE = "-" + LIBRARY_URI + " " + VM_PARAMETERS + " com.sun.spot.util.DummyApp";
+	//public static final String INITIAL_COMMAND_LINE = "-" + LIBRARY_URI + " " + VM_PARAMETERS + " com.sun.spot.util.DummyApp";
+	public static final String INITIAL_COMMAND_LINE = "-" + LIBRARY_URI + " " + VM_PARAMETERS + " com.sun.spot.peripheral.ota.IsolateManager";
 	public static final String INITIAL_ADMIN_COMMAND_LINE = "-" + LIBRARY_URI + " " + VM_PARAMETERS + " -Dspot.start.manifest.daemons=false com.sun.spot.peripheral.ota.OTACommandProcessor";
 
 	// flags
 	private static final byte SLOW_STARTUP_MASK = 1<<0;
+
+    /**
+     * Return the address of the Config Page for this type of SPOT
+     *
+     * @param rev hardware revision of the SPOT
+     * @return config page start address
+     */
+    public static int getConfigPageAddress(int rev) {
+        return CFI_Flash.getSectorAddress(CONFIG_PAGE_SECTOR, rev);
+    }
+
+    public static int getFirstFileSystemSector(int rev) {
+        return (rev < 8) ? FIRST_FILE_SYSTEM_SECTOR : FIRST_FILE_SYSTEM_SECTOR8;
+    }
+
+    public static int getFirstFileSystemSectorAddress(int rev) {
+        return CFI_Flash.getSectorAddress(getFirstFileSystemSector(rev), rev);
+    }
+
+    public static int getLastFileSystemSector(int rev) {
+        return CFI_Flash.getLastLargeSector(rev) - (rev < 8 ? 0 : 1);  // for rev 8 last used by MMU page table
+    }
+
+    public static int getLastFileSystemSectorAddress(int rev) {
+        return CFI_Flash.getSectorAddress(getLastFileSystemSector(rev), rev);
+    }
+
+    public static int getSectorAddress(int sector, int rev) {
+        return CFI_Flash.getSectorAddress(sector, rev);
+    }
 
 	/**
 	 * Create a config page from a byte array
@@ -123,26 +152,36 @@ public class ConfigPage {
 		targetID = Utils.readLittleEndLong(rawConfigPage, SERIAL_NUMBER_OFFSET);
 		configVersion = Utils.readLittleEndShort(rawConfigPage, CONFIG_VERSION_OFFSET);
 		
-		if (configVersion == CURRENT_CONFIG_VERSION) {
+		if (configVersion == CURRENT_CONFIG_VERSION ||
+            (RadioFactory.isRunningOnHost() && configVersion >= MINIMUM_CONFIG_VERSION)) {
 			try {
-				parseCurrentFormat(rawConfigPage);
+				parseConfig(rawConfigPage);
 			} catch (Exception e) {
 				wasLoaded = false;
 				initializeConfigPage();
 			}
 		} else {
 			wasLoaded = false;
+            hardwareRev = 6;
 			initializeConfigPage();
 		}
 	}
 
-	private void parseCurrentFormat(byte[] rawConfigPage) {
+	private void parseConfig(byte[] rawConfigPage) {
 		wasLoaded = true;
 		flags = rawConfigPage[FLAGS_OFFSET];
+        if (configVersion >= 12) {
+            hardwareRev = rawConfigPage[HARDWARE_REVISION_OFFSET];
+        } else {
+            hardwareRev = 6;
+        }
 		vmAddress = Utils.readLittleEndInt(rawConfigPage, VM_ADDRESS_OFFSET);
 
 		cmdLineParams = getCmdLine(rawConfigPage, CMD_LINE_PARAMETERS_NORMAL_OFFSET);
 		cmdLineAdminParams = getCmdLine(rawConfigPage, CMD_LINE_PARAMETERS_ADMIN_OFFSET);
+        if (configVersion >= 12) {
+            sdkDate = getCmdLine(rawConfigPage, SDK_DATE_OFFSET);
+        }
 
 		int strAddr=Utils.readLittleEndShort(rawConfigPage, PUBLIC_KEY_OFFSET);
 		publicKey = new byte[Utils.readLittleEndShort(rawConfigPage, strAddr)];
@@ -170,7 +209,8 @@ public class ConfigPage {
 	 * Create a newly initialized config page
 	 * This constructor is for system use only - please use Spot.getInstance().getConfigPage()
 	 */
-	public ConfigPage() {
+	public ConfigPage(int rev) {
+        hardwareRev = rev;
 		reset();
 	}
 
@@ -185,11 +225,17 @@ public class ConfigPage {
 		Utils.writeLittleEndShort(rawConfigPage, CONFIG_VERSION_OFFSET, configVersion);
 		Utils.writeLittleEndInt(rawConfigPage, VM_ADDRESS_OFFSET, vmAddress);
 		rawConfigPage[FLAGS_OFFSET] = flags;
+        if (configVersion >= 12) {
+            rawConfigPage[HARDWARE_REVISION_OFFSET] = (byte) hardwareRev;
+        }
 		
-		int strAddr = STRINGS_OFFSET;
+		int strAddr = (configVersion >= 12) ? STRINGS_OFFSET : OLD_STRINGS_OFFSET;
 
 		strAddr = insertCmdString(rawConfigPage, strAddr, CMD_LINE_PARAMETERS_NORMAL_OFFSET, cmdLineParams);
 		strAddr = insertCmdString(rawConfigPage, strAddr, CMD_LINE_PARAMETERS_ADMIN_OFFSET, cmdLineAdminParams);
+        if (configVersion >= 12) {
+            strAddr = insertCmdString(rawConfigPage, strAddr, SDK_DATE_OFFSET, sdkDate);
+        }
 		
 		Utils.writeLittleEndShort(rawConfigPage, PUBLIC_KEY_OFFSET, strAddr);
 		Utils.writeLittleEndShort(rawConfigPage, strAddr, (short)publicKey.length);
@@ -293,11 +339,25 @@ public class ConfigPage {
 	}
 
 	/**
+	 * Set the SDK date string
+     *
+	 * @param date the SDK date string
+	 */
+	public void setSdkDate(String date) {
+		sdkDate = date;
+	}
+
+
+    public int getConfigPageAddress() {
+        return CFI_Flash.getSectorAddress(CONFIG_PAGE_SECTOR, hardwareRev);
+    }
+
+	/**
 	 * Get the memory address of the bootstrap suite
 	 * @return The memory address
 	 */
 	public int getBootstrapAddress() {
-		return BOOTSTRAP_ADDRESS;
+		return CFI_Flash.getSectorAddress(BOOTSTRAP_SECTOR, hardwareRev);
 	}
 
 	/**
@@ -345,7 +405,7 @@ public class ConfigPage {
 	 * @return Size in bytes
 	 */
 	public int getBootstrapSpace() {
-		return FIRST_FILE_SYSTEM_SECTOR_ADDRESS - getBootstrapAddress();
+		return getFirstFileSystemSectorAddress() - getBootstrapAddress();
 	}
 
 	/**
@@ -354,7 +414,7 @@ public class ConfigPage {
 	 * @return size in bytes
 	 */
 	public int getManufacturingImageSpace() {
-		return MAX_MANUFACTURING_IMAGE_SIZE;
+		return CFI_Flash.getSize(hardwareRev);
 	}
 
 	/**
@@ -376,7 +436,7 @@ public class ConfigPage {
 
 	private void initializeConfigPage() {
 		configVersion = CURRENT_CONFIG_VERSION;
-		vmAddress = VM_ADDRESS;
+		vmAddress = CFI_Flash.getSectorAddress(VM_SECTOR, hardwareRev);
 		targetID = -1;
 		flags = 0;
 		cmdLineParams = INITIAL_COMMAND_LINE;
@@ -384,7 +444,23 @@ public class ConfigPage {
 		
 		publicKey = new byte[0];
 	}
-	
+
+    public int getFirstFileSystemSector() {
+        return getFirstFileSystemSector(hardwareRev);
+    }
+
+    public int getFirstFileSystemSectorAddress() {
+        return getFirstFileSystemSectorAddress(hardwareRev);
+    }
+
+    public int getLastFileSystemSector() {
+        return getLastFileSystemSector(hardwareRev);
+    }
+
+    public int getLastFileSystemSectorAddress() {
+        return getLastFileSystemSectorAddress(hardwareRev);
+    }
+
 	public void setPublicKey(byte[] key) {
 		publicKey = Utils.copy(key);
 	}
@@ -425,6 +501,20 @@ public class ConfigPage {
 	private boolean getBitFlag(byte mask) {
 		return (flags & mask) != 0;
 	}
+
+	/**
+	 * @return the hardware revision for this SPOT
+	 */
+    public int getHardwareRev() {
+        return hardwareRev;
+    }
+
+	/**
+	 * Set the hardware revision for this SPOT
+	 */
+    public void setHardwareRev(int rev) {
+        hardwareRev = rev;
+    }
 
 	/**
 	 * @return true if the SPOT will run a midlet at startup, false otherwise

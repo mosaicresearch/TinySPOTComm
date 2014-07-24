@@ -1,5 +1,6 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2010 Oracle. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -17,20 +18,24 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA
  * 
- * Please contact Sun Microsystems, Inc., 16 Network Circle, Menlo
- * Park, CA 94025 or visit www.sun.com if you need additional
- * information or have any questions.
+ * Please contact Oracle, 16 Network Circle, Menlo Park, CA 94025 or
+ * visit www.oracle.com if you need additional information or have
+ * any questions.
  */
 
 package com.sun.spot.peripheral.radio;
 
 import com.sun.spot.peripheral.CC2420Driver;
+import com.sun.spot.peripheral.IDriver;
 import com.sun.spot.peripheral.ISleepManager;
 import com.sun.spot.peripheral.ISpot;
 import com.sun.spot.peripheral.PeripheralChipSelect;
 import com.sun.spot.peripheral.SpiPcs;
 import com.sun.spot.peripheral.Spot;
+import com.sun.spot.peripheral.SpotFatalException;
+import com.sun.spot.resources.Resources;
 import com.sun.spot.resourcesharing.IResourceRegistry;
+import com.sun.spot.util.Utils;
 import com.sun.squawk.VM;
 
 /**
@@ -39,7 +44,9 @@ import com.sun.squawk.VM;
 public class RadioFactory {
 
     private static CC2420 theCC2420;
-    private static MACLayer theMACLayer;
+    private static I802_15_4_MAC theRadioMAC;
+    private static IRadioPolicyManager radioPolicyManager;
+
     /*
      * This class should not be instantiated.
      */
@@ -47,15 +54,17 @@ public class RadioFactory {
     private RadioFactory() {
     }
 
-    private static CC2420 getCC2420() {
-        ISpot spot = Spot.getInstance();
-        if (!spot.isMasterIsolate()) {
-            throw new IllegalStateException("Cannot access physical radio from a child isolate");
-        }
+    private synchronized static CC2420 getCC2420() {
         if (theCC2420 == null) {
-            CC2420Driver cc2420Spi = new CC2420Driver(spot.getSPI(), new SpiPcs(PeripheralChipSelect.SPI_PCS_CC2420, CC2420Driver.SPI_CONFIG), spot.getSpotPins());
-            theCC2420 = new CC2420(cc2420Spi, spot.getAT91_AIC());
+            theCC2420 = (CC2420)Resources.lookup(CC2420.class);
+		}
+        if (theCC2420 == null) {
+            ISpot spot = Spot.getInstance();
+            int spiConfig = (spot.getHardwareType() < 8) ? CC2420Driver.SPI_CONFIG : CC2420Driver.SPI_CONFIG8;
+            CC2420Driver cc2420Spi = new CC2420Driver(spot.getSPI(), new SpiPcs(PeripheralChipSelect.SPI_PCS_CC2420(), spiConfig), spot.getSpotPins(), spot.getAT91_AIC());
+            theCC2420 = new CC2420(cc2420Spi);
             spot.getDriverRegistry().add(theCC2420);
+            Resources.add(theCC2420);
         }
         return theCC2420;
     }
@@ -64,21 +73,35 @@ public class RadioFactory {
      * Answer the interface for dealing with the radio at the I802.15.4 MAC level.
      * @return the radio MAC layer object
      */
-    public static I802_15_4_MAC getI802_15_4_MAC() {
-        if (!Spot.getInstance().isMasterIsolate()) {
-            throw new IllegalStateException("Cannot access MAC from a child isolate");
+    public synchronized static I802_15_4_MAC getI802_15_4_MAC() {
+        if (theRadioMAC == null) {
+            theRadioMAC = (MACLayer)Resources.lookup(I802_15_4_MAC.class);
+		}
+        if (theRadioMAC == null) {
+            theRadioMAC = new MACLayer(getCC2420());
+            theRadioMAC.addTag("Standard SPOT radio stack");
+            Resources.add(theRadioMAC);
         }
-        if (theMACLayer == null) {
-            theMACLayer = new MACLayer(getCC2420());
+        return theRadioMAC;
+    }
+
+    /**
+     * Set the I802_15_4_MAC radio handler.
+     * @param radioMAC the MAC layer code to use
+     */
+    public static void setI802_15_4_MAC(I802_15_4_MAC radioMAC) {
+        if (theRadioMAC != null) {
+            Resources.remove(theRadioMAC);
         }
-        return theMACLayer;
+        theRadioMAC = radioMAC;
+        Resources.add(theRadioMAC);
     }
 
     /**
      * Answer the interface for accessing the socket MAC.
      * @return the socket MAC layer object
      */
-    public synchronized static I802_15_4_MAC getSocketMAC() {
+    public static I802_15_4_MAC getSocketMAC() {
         return null;
     }
     
@@ -96,10 +119,36 @@ public class RadioFactory {
     }
 	
     /**
+     * @return true if running in the emulator, false otherwise
+     */
+    public static boolean isRunningInEmulator() {
+        return false;
+    }
+
+    /**
      * @return true if this method has been called in the context of the master isolate
      */
     public static boolean isMasterIsolate() {
         return Spot.getInstance().isMasterIsolate();
+    }
+
+    /**
+     * Return the hardware revision number for the SPOT.
+     *
+     * @return the hardware revision number for the SPOT
+     */
+    public static int getHardwareRevision() {
+        return Spot.getInstance().getHardwareType();
+    }
+
+    /**
+     * For the host so can spotclient set the hardware revision number for the
+     * SPOT connected to it.
+     *
+     * @param rev the hardware revision number for the SPOT
+     */
+    public static void setHardwareRevision(int rev) {
+        throw new SpotFatalException("Cannot set a SPOTs hardware revision");
     }
 
     /**
@@ -126,6 +175,7 @@ public class RadioFactory {
      * Get the singleton resource registry
      * 
      * @return the resource registry
+     * @deprecated
      */
     public static IResourceRegistry getResourceRegistry() {
         return Spot.getInstance().getResourceRegistry();
@@ -146,7 +196,36 @@ public class RadioFactory {
      * @return the radio policy manager
      */
     public static IRadioPolicyManager getRadioPolicyManager() {
-        return Spot.getInstance().getRadioPolicyManager();
+        if (radioPolicyManager == null) {
+            radioPolicyManager = (IRadioPolicyManager) Resources.lookup(IRadioPolicyManager.class);
+            if (radioPolicyManager == null) {
+                radioPolicyManager = new RadioPolicyManager(
+                        RadioFactory.getI802_15_4_MAC(),
+                        Utils.getSystemProperty("radio.channel",              // use system property if set
+                            Utils.getManifestProperty("DefaultChannelNumber", // else manifest property
+                                IProprietaryRadio.DEFAULT_CHANNEL)),          // else default
+                        (short) Utils.getSystemProperty("radio.pan.id",
+                            Utils.getManifestProperty("DefaultPanId",
+                                IRadioPolicyManager.DEFAULT_PAN_ID)),
+                        Utils.getSystemProperty("radio.transmit.power",
+                            Utils.getManifestProperty("DefaultTransmitPower",
+                                IProprietaryRadio.DEFAULT_TRANSMIT_POWER)));
+                Resources.add(radioPolicyManager);
+                Spot.getInstance().getDriverRegistry().add((IDriver) radioPolicyManager);
+            }
+        }
+        return radioPolicyManager;
+    }
+
+    /**
+     * Set the singleton radio policy manager
+     */
+    public static void setRadioPolicyManager(IRadioPolicyManager rpm) {
+        if (radioPolicyManager != null) {
+            Resources.remove(radioPolicyManager);
+        }
+        radioPolicyManager = rpm;
+        Resources.add(radioPolicyManager);
     }
 
     /**
@@ -158,14 +237,13 @@ public class RadioFactory {
         return getCC2420();
     }
 
-
     /**
      * Get access to the I802.15.4 MAC layers
      * 
      * @return the I802.15.4 MAC layers
      */
     public static I802_15_4_MAC[] getI802_15_4_MACs() {
-        return Spot.getInstance().getI802_15_4_MACs();
+        return new I802_15_4_MAC[]{ getI802_15_4_MAC() };
     }
 
     /**

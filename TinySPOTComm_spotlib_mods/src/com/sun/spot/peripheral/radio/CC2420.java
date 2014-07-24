@@ -1,5 +1,6 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2010 Oracle. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -17,10 +18,11 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA
  * 
- * Please contact Sun Microsystems, Inc., 16 Network Circle, Menlo
- * Park, CA 94025 or visit www.sun.com if you need additional
- * information or have any questions.
+ * Please contact Oracle, 16 Network Circle, Menlo Park, CA 94025 or
+ * visit www.oracle.com if you need additional information or have
+ * any questions.
  */
+
 /*
  * Copyright (C) 2009  Daniel van den Akker	(daniel.vandenakker@ua.ac.be)
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
@@ -40,17 +42,17 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
+
 package com.sun.spot.peripheral.radio;
 
+//TinySPOTComm import
 import be.ac.ua.pats.tinyspotcomm.IEEEAddressHash;
 
 import com.sun.spot.peripheral.CC2420Driver;
-import com.sun.spot.peripheral.IAT91_AIC;
-import com.sun.spot.peripheral.IAT91_Peripherals;
 import com.sun.spot.peripheral.IDriver;
-import com.sun.spot.peripheral.ISleepManager;
 import com.sun.spot.peripheral.Spot;
 import com.sun.spot.peripheral.SpotFatalException;
+import com.sun.spot.resources.Resource;
 import com.sun.spot.util.Utils;
 import com.sun.squawk.Address;
 import com.sun.squawk.Unsafe;
@@ -66,7 +68,8 @@ import com.sun.squawk.vm.ChannelConstants;
  * 
  * Changed by Daniel van den Akker 10/2008 : added address recognition for 16-bit addresses
  */
-class CC2420 implements I802_15_4_PHY, IProprietaryRadio, IDriver {
+
+class CC2420 extends Resource implements I802_15_4_PHY, IProprietaryRadio, IDriver {
 	
 	private CC2420Driver driver;
 	private int lastStatus;
@@ -88,7 +91,6 @@ class CC2420 implements I802_15_4_PHY, IProprietaryRadio, IDriver {
 	 *  
 	 */
 	private int trxState;
-	private IAT91_AIC aic;
 	private boolean overflowDetected;
 	private int fifoRemaining;
 
@@ -97,8 +99,9 @@ class CC2420 implements I802_15_4_PHY, IProprietaryRadio, IDriver {
 	private int rxOverflow;
 	private int shortPacket;
 	private int crcError;
-	
-	private static final IEEEAddressHash hasher = IEEEAddressHash.getInstance(); 
+        
+        //TinySPOTComm variable addition
+        private static final IEEEAddressHash hasher = IEEEAddressHash.getInstance();
 
 	private static final int REG_SNOP     = 0;
 	private static final int REG_SXOSCON  = 1;
@@ -140,9 +143,10 @@ class CC2420 implements I802_15_4_PHY, IProprietaryRadio, IDriver {
 	private static final int STATUS_RSSI_VALID		= 1 << 1;
 
 	private static final int RAM_PANID 		= 0x168;
-	private static final int RAM_IEEE_ADR64 	= 0x160;
+	//private static final int RAM_IEEEADR 	= 0x160;
 	//TinySPOTComm addition
-	private static final int RAM_IEEE_ADR16 	= 0x16A;
+	private static final int RAM_IEEE_ADR16 = 0x16A;
+        private static final int RAM_IEEE_ADR64 = 0x160;
 	
 	/*
 	 * FIFOP_THR controls when the CC2420 raises FIFOP. It raises it when FIFOP_THR bytes are unread
@@ -157,8 +161,6 @@ class CC2420 implements I802_15_4_PHY, IProprietaryRadio, IDriver {
 	private static final int FIFOP_THR = 95;
 	private static final int RX_FIFO_SIZE = 128;
 	
-	private static final int FIFOP_INTERRUPT = IAT91_Peripherals.IRQ3_ID_MASK;
-
 	private int offMode;
 	private boolean addressRecognitionEnabled;
 	private short panId;
@@ -168,22 +170,18 @@ class CC2420 implements I802_15_4_PHY, IProprietaryRadio, IDriver {
 	private boolean recordHistory = false;
 	private Object rxTxInterlockMonitor = new Object();
 	private Address addressOfLastDeviceInterruptTime;
+    private int rev;
 
     private boolean waitingForRxToClear = false;
 	
-	//For testing only
-	CC2420(CC2420Driver driver) {
-		this.driver = driver;
-	};
-	
 	/*
-	 * Package constructor - please use getInstance() instead.
+	 * Package constructor - please use RadioFactory.getCC2420() instead.
 	 */
 
-	CC2420(CC2420Driver driver, IAT91_AIC aic) {
+	CC2420(CC2420Driver driver) {
 		this.driver = driver;
-		this.aic = aic;
-
+        rev = Spot.getInstance().getHardwareType();
+        
 		addressOfLastDeviceInterruptTime = Address.fromPrimitive(VM.execSyncIO(ChannelConstants.GET_LAST_DEVICE_INTERRUPT_TIME_ADDR, 0));
 		
 		resetErrorCounters();
@@ -196,7 +194,11 @@ class CC2420 implements I802_15_4_PHY, IProprietaryRadio, IDriver {
         setUp();
 	}
 
-	public void resetErrorCounters() {
+	CC2420(CC2420Driver driver, int dummy) {        // for testing only
+		this.driver = driver;
+    }
+
+    public void resetErrorCounters() {
 		txMissed = 0;
         crcError = 0;
         shortPacket = 0;
@@ -228,9 +230,11 @@ class CC2420 implements I802_15_4_PHY, IProprietaryRadio, IDriver {
 	 * Reset the hardware device receive buffer.
 	 */
 	public void resetRX() {
-        // just like flushRX(), but increment rxError counter
+        // called by flushRX()
 		driver.sendStrobe(REG_SFLUSHRX);
 		lastStatus = driver.sendStrobe(REG_SFLUSHRX);
+		overflowDetected = false;
+        fifoRemaining = 0;
     }
 
 
@@ -239,52 +243,57 @@ class CC2420 implements I802_15_4_PHY, IProprietaryRadio, IDriver {
 	 */
 	public int pdDataRequest(RadioPacket rp) {
 		dataRequest(rp, false);
-		return SUCCESS; // pretend it worked: I802.15.4 doesnt allow us to say it failed for CCA
+		return SUCCESS; // pretend it worked: I802.15.4 doesn't allow us to say it failed for CCA
 	}
 	
 	public int dataRequest(RadioPacket rp, boolean retry) {
-		int result = SUCCESS;
-		while (isTxActive()) { // wait for any current tx to finish, so we don't flush TX_FIFO too soon
-			Thread.yield();
-		}
-		// clear tx buffer, then load it, then send strobe to perform tx if channel is clear
-		if (!retry) {
-			driver.sendStrobe(REG_SFLUSHTX);
-			sendRP(REG_TXFIFO, rp);
-		}
-		// Temporarily increase priority to max. This reduces the chance
-		// that we will fail to start waiting for tx to start until it has
-		// already started and finished. This in turn will reduce our likelihood
-		// of sending duplicate packets.
-		int currentPriority = Thread.currentThread().getPriority();
-		VM.setSystemThreadPriority(Thread.currentThread(), VM.MAX_SYS_PRIORITY);
-		waitForRxToClear();
-		lastStatus = driver.sendStrobe(REG_STXONCCA);
+        int result = SUCCESS;
+        while (isTxActive()) { // wait for any current tx to finish, so we don't flush TX_FIFO too soon
+            Thread.yield();
+        }
+        // clear tx buffer, then load it, then send strobe to perform tx if channel is clear
+        if (!retry) {
+            driver.sendStrobe(REG_SFLUSHTX);
+            sendRP(REG_TXFIFO, rp);
+        }
+        // Temporarily increase priority to max. This reduces the chance
+        // that we will fail to start waiting for tx to start until it has
+        // already started and finished. This in turn will reduce our likelihood
+        // of sending duplicate packets.
+        int currentPriority = Thread.currentThread().getPriority();
+        int i = 0, j = 0, imax = (rev < 8 ? 20 : 50);
+        try {
+            VM.setSystemThreadPriority(Thread.currentThread(), VM.MAX_SYS_PRIORITY);
+            if (!waitForRxToClear(retry)) {
+                return BUSY;
+            }
+            lastStatus = driver.sendStrobe(REG_STXONCCA);
 
-		// wait for tx to start
-		int i = 0, j = 0;
-		while (!isTxActive() && i<10) {
-			i++;
-		}
-		VM.setSystemThreadPriority(Thread.currentThread(), currentPriority);
+            // wait for tx to start
+            while (!isTxActive() && i < imax) {
+                i++;
+            }
+        } finally {
+            VM.setSystemThreadPriority(Thread.currentThread(), currentPriority);
+        }
 
-		if (i==10) { // transmission did not start.
-			txMissed++; 
-			result = BUSY;
-		} else {
-			while (!driver.isSfdHigh() && j < 10000) {
-				// Now wait for SFD to go high. In theory, this shouldn't be necessary, but tests
-				// fail if you don't.
-				j++;
-			}
-		}
-		rp.timestamp = System.currentTimeMillis();
+        if (!isTxActive() && i == imax) { // transmission did not start.
+            txMissed++;
+            result = BUSY;
+        } else {
+            while (!driver.isSfdHigh() && j < 10000) {
+                // Now wait for SFD to go high. In theory, this shouldn't be necessary, but tests
+                // fail if you don't.
+                j++;
+            }
+        }
+        rp.timestamp = System.currentTimeMillis();
 
-		// after a transmit, the CC2420 always enables the recevier
-		trxState = RX_ON;
-		
-		return result;
-	}
+        // after a transmit, the CC2420 always enables the receiver
+        trxState = RX_ON;
+
+        return result;
+    }
 
 	private boolean isTxActive() {
 		return (driver.sendStrobe(REG_SNOP) & STATUS_TX_ACTIVE) != 0;
@@ -297,34 +306,55 @@ class CC2420 implements I802_15_4_PHY, IProprietaryRadio, IDriver {
 		boolean good = false;
 		// don't return from this method until a good packet has been received
 		while (!good) {
-			// get the current pin status
-			while (!driver.isFifopHigh()) {
-				// FIFOP is low, so wait for int
-				// don't enable the interrupt if the receiver is off, as we don't want to prohibit deep sleep
-				if (trxState == RX_ON) {
-					aic.enableIrq(FIFOP_INTERRUPT);
-				}
-				aic.waitForInterrupt(FIFOP_INTERRUPT);
-			}
-			synchronized (rxTxInterlockMonitor) {
-				good = readPacketFromFIFO(rp);
-				rxTxInterlockMonitor.notifyAll();
-			}
-		}
+            try {
+                while (!driver.isFifopHigh()) {     // get the current pin status
+                    // FIFOP is low, so wait for int
+                    // don't enable the interrupt if the receiver is off, as we don't want to prohibit deep sleep
+                    if (trxState == RX_ON) {
+                        driver.enableFifopInterrupt();
+                    }
+                    if (!driver.isFifopHigh()) {    // test again to minimize window of missing transition
+                        driver.waitForFifopInterrupt();
+                    }
+                }
+                synchronized (rxTxInterlockMonitor) {
+                    good = readPacketFromFIFO(rp);
+                    rxTxInterlockMonitor.notifyAll();
+                }
+            } catch (InterruptedException ex) {
+                // okay to ignore - just recheck pin state
+            }
+        }
 		rp.timestamp = Unsafe.getLong(addressOfLastDeviceInterruptTime, 0);
 	}
 
-	private void waitForRxToClear() {
+	private boolean waitForRxToClear(boolean retry) {
 		synchronized (rxTxInterlockMonitor) {
-			while (driver.isSfdHigh() || overflowDetected || driver.isFifopHigh()) {
-				try {
-                    waitingForRxToClear = true;
-                    rxTxInterlockMonitor.wait();
-                    waitingForRxToClear = false;
-				} catch (InterruptedException e) {
-					e.printStackTrace();
-				}
-			}
+            try {
+                waitingForRxToClear = true;
+                int cnt = 0;
+                while (driver.isSfdHigh() || overflowDetected ||
+                        (driver.isFifopHigh() && !driver.isFifoHigh())) {
+                    try {
+                        rxTxInterlockMonitor.wait(2); // timeout since there might not be a receive thread running
+                        if (++cnt == 5 && retry) {
+                            if (!driver.isSfdHigh() && !overflowDetected &&
+                                 driver.isFifopHigh() && !driver.isFifoHigh()) {
+                                // looks like FIFO is wedged so reset it
+                                Utils.log("[waitForRxToClear] looks like FIFO is wedged so will reset it");
+                                resetRX();
+                            }
+                        } else if (cnt > 10) {
+                            return false;    // fail if cannot send for 20 milliseconds
+                        }
+                    } catch (InterruptedException ex) {
+                        cnt++;
+                    }
+                }
+            } finally {
+                waitingForRxToClear = false;
+            }
+            return true;
 		}
 	}
 
@@ -418,9 +448,9 @@ class CC2420 implements I802_15_4_PHY, IProprietaryRadio, IDriver {
 		this.extendedAddress = extendedAddress;
 		// write values to ram
 		driver.sendRAM(RAM_PANID, panId);
-		
-		driver.sendRAM(RAM_IEEE_ADR64, extendedAddress);
+				
 		//TinySPOTComm addition
+                driver.sendRAM(RAM_IEEE_ADR64, extendedAddress);
 		short sh_addr = hasher.To16Bit(extendedAddress);
 		driver.sendRAM(RAM_IEEE_ADR16, sh_addr);
 
@@ -557,7 +587,6 @@ class CC2420 implements I802_15_4_PHY, IProprietaryRadio, IDriver {
 	 */
 	public void setUp() {
 		driver.setUp();
-		aic.configure(FIFOP_INTERRUPT, IAT91_AIC.AIC_IRQ_PRI_NORMAL, IAT91_AIC.SRCTYPE_HIGH_LEVEL);
         resetPrim();
         if (addressRecognitionEnabled) {
         	setAddressRecognition(panId, extendedAddress);
@@ -743,7 +772,7 @@ class CC2420 implements I802_15_4_PHY, IProprietaryRadio, IDriver {
 	
 	/**
 	 * @param rp - empty RadioPacket; this routine must fill in buffer and length
-	 * @return - true if CRC and packaet length ok
+	 * @return - true if CRC and packet length okay
 	 */
 	boolean processRP(RadioPacket rp) {
 		if (!overflowDetected && (rp.getLength() > 127)) {
@@ -753,6 +782,7 @@ class CC2420 implements I802_15_4_PHY, IProprietaryRadio, IDriver {
 			// If overflowDetected was already true, then we detected overflow in a previous read, so 
 			// we already have a correct (lower) value for fifoRemaining.
 			overflowDetected = true;
+            rxOverflow++;
 			fifoRemaining = RX_FIFO_SIZE;
 		}
 		
@@ -761,47 +791,41 @@ class CC2420 implements I802_15_4_PHY, IProprietaryRadio, IDriver {
 			// we are in an overflow state
 			//Utils.log("reading pkt in oflow state, pkt size was " + size);
 			fifoRemaining = fifoRemaining - (size + 1); // add 1 to account for length byte
-			if (fifoRemaining < 3 || !driver.isFifopHigh()) {
+			if (fifoRemaining < 5 || !driver.isFifopHigh()) {
+                int fifoRemainingWas = fifoRemaining;
 				// can't be any more valid packets
 				// Note that fifop doesn't seem to go low when you read the last valid packet after an overflow,
 				// even though, logically, it should. However, there do seem to be cases where fifop goes low
 				// before fifoRemaining < 3.
-				if (recordHistory) {
-					history.setFlushed();
-				}
-				// flush the fifo
-				flushRX();
-			}
-			if (fifoRemaining < 0) {
-				// the packet just read didn't fit - it caused the overflow
-				if (recordHistory) {
-					history.setDiscarded();
-				}
-				return false;
+				flushRX();                  // flush the fifo & set overflowDetected = false
+
+                if (fifoRemainingWas < 0) {
+                    // the packet just read didn't fit - it caused the overflow
+                    if (recordHistory) {
+                        history.setDiscarded();
+                    }
+                    return false;
+                }
 			}
 		}
 
 		boolean result = false;
-		if (size < 3) {
+		if (size < 5) {
 			shortPacket++;
-//			if (overflowDetected) {
-//				Utils.log("[overflow] short packet of size " + size + ", fifoRemaining=" + fifoRemaining);
-//			} else {
-//				Utils.log("short packet of size " + size);
-//			}
-			
+            flushRX();                          // flush the fifo - bug 1240
 		} else {
 			size = size - 2; // to allow for the FCS
 			rp.setLength(size);
-//			if (overflowDetected) {
-//				Utils.log("[overflow] packet of size " + size + ", fifoRemaining=" + fifoRemaining);
-//				Utils.log(rp);
-//			}
 			rp.rssi = rp.buffer[size+1];
 			int fcs = rp.buffer[size+2];
 			rp.corr = fcs & 0x7F;
-			result = (fcs & 0x80) != 0; // test CRC valid flag
-			if (!result) crcError++;
+			result = (fcs & 0x80) != 0;         // test CRC valid flag
+			if (!result) {
+                crcError++;
+                if ((rp.getFrameControl() & 0x07) >= 0x04) {  // reserved frame type
+                    flushRX();                  // flush the fifo - bug 1240
+                }
+            }
 		}
 		if (recordHistory) {
 			history.setRejected(result);
@@ -810,10 +834,10 @@ class CC2420 implements I802_15_4_PHY, IProprietaryRadio, IDriver {
 	}
 
 	private void flushRX() {
-		driver.sendStrobe(REG_SFLUSHRX);
-		lastStatus = driver.sendStrobe(REG_SFLUSHRX);
-		rxOverflow++;
-		overflowDetected = false;
+        resetRX();
+        if (recordHistory) {
+            history.setFlushed();
+        }
 	}
 
 	private void startRX() {
@@ -826,7 +850,7 @@ class CC2420 implements I802_15_4_PHY, IProprietaryRadio, IDriver {
 			powerUp();
 		}
 		// start the RX
-		aic.enableIrq(FIFOP_INTERRUPT);
+        driver.enableFifopInterrupt();
 		driver.sendStrobe(REG_SRXON);
 		driver.sendStrobe(REG_SFLUSHRX);
 		lastStatus = driver.sendStrobe(REG_SFLUSHRX);
@@ -835,9 +859,9 @@ class CC2420 implements I802_15_4_PHY, IProprietaryRadio, IDriver {
 	private void stopRX() {
 //		Utils.log("[CC2420] stopping rx");
 		lastStatus = driver.sendStrobe(REG_SRFOFF);
-		aic.disableIrq(FIFOP_INTERRUPT);
-		
-		if (offMode == OFF_MODE_POWER_DOWN) {
+        driver.disableFifopInterrupt();
+
+        if (offMode == OFF_MODE_POWER_DOWN) {
 			powerDown();
 		} else if (offMode == OFF_MODE_VREG_OFF) {
 			stopChip();

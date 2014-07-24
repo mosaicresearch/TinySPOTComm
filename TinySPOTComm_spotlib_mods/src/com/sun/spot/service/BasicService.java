@@ -24,12 +24,14 @@
 
 package com.sun.spot.service;
 
+import com.sun.spot.resources.Resource;
+
 /**
  * A stub class for those simple services that do not run in their own threads.
  * 
  * @author Ron Goldman
  */
-abstract public class BasicService implements IService {
+abstract public class BasicService extends Resource implements IService {
 
     public boolean start() {
         return false;

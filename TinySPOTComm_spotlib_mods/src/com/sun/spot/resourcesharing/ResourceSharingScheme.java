@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2007-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -26,6 +26,8 @@ package com.sun.spot.resourcesharing;
 
 /**
  * An enumerated type that defines the different sharing schemes for shared resources.
+ *
+ * @deprecated  As of v6.0 (Yellow), replaced by {@link com.sun.spot.resources}
  */
 public abstract class ResourceSharingScheme {
 
@@ -41,20 +43,20 @@ public abstract class ResourceSharingScheme {
 	 * is permitted. READ access for the requestor is implied.
 	 */
 	public static final ResourceSharingScheme EXCLUSIVE_WRITE = new ResourceSharingScheme("ew", 30) {
-		boolean compatibleWith(ResourceSharingScheme scheme) {return scheme==READ;}};
+		boolean compatibleWith(ResourceSharingScheme scheme) {return scheme.id.equals(READ.id);}};
 
 	/**
 	 * The requestor requires write access to the resource, but concurrent READ and/or
 	 * WRITE access is permitted. READ access for the requestor is implied.
 	 */
 	public static final ResourceSharingScheme WRITE = new ResourceSharingScheme("wr", 20) {
-		boolean compatibleWith(ResourceSharingScheme scheme) {return scheme==this || scheme==READ;}};
+		boolean compatibleWith(ResourceSharingScheme scheme) {return scheme.id.equals(WRITE.id) || scheme.id.equals(READ.id);}};
 
 	/**
 	 * The requestor requires read access to the resource.
 	 */
 	public static final ResourceSharingScheme READ = new ResourceSharingScheme("rd", 10) {
-		boolean compatibleWith(ResourceSharingScheme scheme) {return scheme==this || scheme==WRITE || scheme==EXCLUSIVE_WRITE;}};
+		boolean compatibleWith(ResourceSharingScheme scheme) {return scheme.id.equals(READ.id) || scheme.id.equals(WRITE.id) || scheme.id.equals(EXCLUSIVE_WRITE.id);}};
 
 	private String id;
 	private int rank;

@@ -62,10 +62,6 @@ public class ProxyInitializer {
      * @throws IllegalArgumentException thrown when the initStr is not properly formatted.
      */
     public ProxyInitializer(String initStr) throws IllegalArgumentException {
-        if(!initStr.startsWith(INITIALIZER + SEPERATOR)){
-            throw new IllegalArgumentException("Invalid initializer: should start with " + INITIALIZER);
-        }
-        
         int posHost = initStr.indexOf(SEPERATOR);
         if(posHost==-1){
             throw new IllegalArgumentException("Invalid initializer: \"" + SEPERATOR + "\" expected to reperate INITIALIZER and hostname");
@@ -79,9 +75,14 @@ public class ProxyInitializer {
         }
         posPort++;        
         
+        int posLast = initStr.indexOf(SEPERATOR, posPort);
+        if(posLast==-1){
+            throw new IllegalArgumentException("Invalid initializer: \"" + SEPERATOR + "\" expected termination");
+        }
+        posLast++;        
+        
         host = initStr.substring(posHost,posPort-1);
-        port = initStr.substring(posPort);
-
+        port = initStr.substring(posPort,posLast-1);
     }
     
     /**
@@ -112,7 +113,7 @@ public class ProxyInitializer {
      * Returns a formatted string representing the initStr to be sent to the proxy
      */
     public String toString(){
-        return INITIALIZER + SEPERATOR + host + SEPERATOR + port;
+        return INITIALIZER + SEPERATOR + host + SEPERATOR + port + SEPERATOR;
     }
     
 }

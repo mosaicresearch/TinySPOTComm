@@ -1,5 +1,5 @@
 /*
- * Copyright 2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2008-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  *
  * This code is free software; you can redistribute it and/or modify
@@ -24,6 +24,7 @@
 
 package com.sun.spot.peripheral;
 
+import com.sun.spot.resources.Resource;
 import com.sun.squawk.VM;
 import com.sun.squawk.vm.ChannelConstants;
 import java.io.IOException;
@@ -35,7 +36,7 @@ import java.io.IOException;
  *
  * @author Ron Goldman
  */
-public class AT91_I2C implements II2C {
+public class AT91_I2C extends Resource implements II2C {
 
     private static final int AT91C_TWI_COMPLETE = 0x01;  // (TWI) Transmission completed
     private static final int AT91C_TWI_OVERRUN  = 0x40;  // (TWI) Overrun Error

@@ -25,7 +25,9 @@
 package com.sun.spot.util;
 
 /**
- * Callback interface from the BootloaderListener
+ * Callback interface from the BootloaderListener.
+ *
+ * @deprecated Please use the new IBootloaderListener & BootloaderListenerService instead.
  */
 public interface IBootloaderListenerCallback {
 

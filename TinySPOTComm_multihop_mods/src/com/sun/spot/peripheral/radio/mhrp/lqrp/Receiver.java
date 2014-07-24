@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  *
  * This code is free software; you can redistribute it and/or modify
@@ -104,20 +104,20 @@ public class Receiver extends Thread implements IProtocolManager {
             if (receivedPacket != null) {
                 switch (receivedPacket.message.getType()) {
                     case Constants.RREQ_TYPE:
-                        handleRREQMessage((RREQ) receivedPacket.message, receivedPacket.messageSender);
+                        handleRREQMessage(receivedPacket);
                         break;
                     case Constants.RREP_TYPE:
-                        handleRREPMessage((RREP) receivedPacket.message, receivedPacket.messageSender);
+                        handleRREPMessage(receivedPacket);
                         break;
                     case Constants.RERR_TYPE:
-                        handleRERRMessage((RERR) receivedPacket.message, receivedPacket.messageSender);
+                        handleRERRMessage(receivedPacket);
                         break;
                         
                     case Constants.LQREQ_TYPE:
-                        handleLQREQMessage((LQREQ) receivedPacket.message, receivedPacket.messageSender);
+                        handleLQREQMessage(receivedPacket);
                         break;
                     case Constants.LQREP_TYPE:
-                        handleLQREPMessage((LQREP) receivedPacket.message, receivedPacket.messageSender);
+                        handleLQREPMessage(receivedPacket);
                         break;
 
                     default:
@@ -139,18 +139,34 @@ public class Receiver extends Thread implements IProtocolManager {
      * @param message
      * @param lastHop the node that this message was sent from
      */
-    private void handleRERRMessage(RERR message, long lastHop) {
-//        Debug.print("[LQRP] handle RERRMessage from " + new IEEEAddress(lastHop) + " for route to "
-//                + new IEEEAddress(message.getDestAddress()) + " as requested by "
-//                + new IEEEAddress(message.getOrigAddress()) + " at " + System.currentTimeMillis());
-        
+    private void handleRERRMessage(ReceivedPacket receivedPacket) {        
+        RERR message = (RERR)receivedPacket.message;
+        long lastHop = receivedPacket.messageSender;
+        boolean forward = true;
+//        Debug.print("[LQRP] handle RERR message from " + IEEEAddress.toDottedHex(lastHop) + " for route to "
+//                + IEEEAddress.toDottedHex(message.getDestAddress()) + " as requested by "
+//                + IEEEAddress.toDottedHex(message.getOrigAddress()) + " at " + System.currentTimeMillis());
+
+        if (receivedPacket.broadcast) { // ignore RERR message if we are not on that route
+//            System.out.println("[LQRP] received broadcast RERR from: " + IEEEAddress.toDottedHex(lastHop));
+            long destinationAddress =
+                (routingTable.getNextHopInfo(message.getOrigAddress())).nextHop;
+            if (destinationAddress == Constants.INVALID_NEXT_HOP) {
+//                System.out.println("[LQRP] Ignoring broadcast RERR message");
+                return;                 // didn't have the route in our table
+            } else {
+                forward = lastHop != destinationAddress;
+            }
+        }
         
         routingTable.deactivateRoute(ourAddress, message.getDestAddress());
         if (message.getOrigAddress() == ourAddress) {
             // Debug.print("handleRERRMessage: RERR for this node", 1);
         } else {
             routingTable.deactivateRoute(message.getOrigAddress(), message.getDestAddress());
-            sender.forwardLQRPMessage(message);
+            if (forward) {
+                sender.forwardLQRPMessage(message);
+            }
         }
         if (!lqrpListeners.isEmpty()) {
             Enumeration en = lqrpListeners.elements();
@@ -173,17 +189,28 @@ public class Receiver extends Thread implements IProtocolManager {
      * @param message
      * @param lastHop  the node we got this message from
      */
-    private void handleRREPMessage(RREP message, long lastHop) {
+    private void handleRREPMessage(ReceivedPacket receivedPacket) {
+        RREP message = (RREP)receivedPacket.message;
+        long lastHop = receivedPacket.messageSender;
         
-//        Debug.print("[LQRP] handle RREPMessage from " + new IEEEAddress(lastHop)
-//        + " for route to " + new IEEEAddress(message.getDestAddress())
-//        + " as requested by " + new IEEEAddress(message.getOrigAddress())
-//        + " at " + System.currentTimeMillis());
+//        Debug.print("[LQRP] handle RREPMessage from " + IEEEAddress.toDottedHex(lastHop)
+//                + " for route to " + IEEEAddress.toDottedHex(message.getDestAddress())
+//                + " as requested by " + IEEEAddress.toDottedHex(message.getOrigAddress())
+//                + " at " + System.currentTimeMillis());
 
         message.incrementHopCount();
+        if (message.getHopCount() > Constants.NET_DIAMETER) {
+            return;  // Don't forward request
+        }
+        if (message.getDestAddress() == ourAddress) {
+            Debug.print("handleRREPMessage: received route to self!!! " +
+                        " from " + IEEEAddress.toDottedHex(lastHop) +
+                        " Originator " + IEEEAddress.toDottedHex(message.getOrigAddress()), 1);
+            return;  // ignore messages about routes to ourself
+        }
         
         if (message.getOrigAddress() == (long)0xffff) {
-//            Debug.print("[AODV] Processing Neighbor Advertisement");
+//            Debug.print("[LQRP] Processing Neighbor Advertisement");
             // getNextHopInfo will freshen the route if it exists
             RouteInfo ri = routingTable.getNextHopInfo(message.getDestAddress());
             if (ri.nextHop == Constants.INVALID_NEXT_HOP) {
@@ -213,8 +240,15 @@ public class Receiver extends Thread implements IProtocolManager {
                             + " Originator " + IEEEAddress.toDottedHex(message.getOrigAddress()), 1);
                 }
             }
-        } else if (!rpm.isEndNode()) { // Only forward RREP if not an end node
-            sender.forwardLQRPMessage(message);
+        } else if (!rpm.isEndNode()) {      // Only forward RREP if not an end node
+            long nextHopAddr = routingTable.getNextHopInfo(message.getOrigAddress()).nextHop;
+            if (nextHopAddr != lastHop) {   // Don't send RREP back to whoever sent it to us
+                sender.forwardLQRPMessage(message);
+            } else {
+                Debug.print("[handleRREPMessage] RREP loop to " +
+                        IEEEAddress.toDottedHex(message.getOrigAddress()) +
+                        " from " + IEEEAddress.toDottedHex(lastHop), 1);
+            }
         }
         if (!lqrpListeners.isEmpty()) {
             Enumeration en = lqrpListeners.elements();
@@ -246,10 +280,12 @@ public class Receiver extends Thread implements IProtocolManager {
      * @param message
      * @param lastHop
      */
-    private void handleRREQMessage(RREQ message, long lastHop) {
-//        Debug.print("[LQRP] handle RREQMessage from " + new IEEEAddress(lastHop) + " for route to "
-//                + new IEEEAddress(message.getDestAddress()) + " as requested by "
-//                + new IEEEAddress(message.getOrigAddress()) + " at " + System.currentTimeMillis());
+    private void handleRREQMessage(ReceivedPacket receivedPacket) {
+        RREQ message = (RREQ)receivedPacket.message;
+        long lastHop = receivedPacket.messageSender;
+//        Debug.print("[LQRP] handle RREQMessage from " + IEEEAddress.toDottedHex(lastHop) + " for route to "
+//                + IEEEAddress.toDottedHex(message.getDestAddress()) + " as requested by "
+//                + IEEEAddress.toDottedHex(message.getOrigAddress()) + " at " + System.currentTimeMillis());
         message.incrementHopCount();
         if (message.getHopCount() > Constants.NET_DIAMETER) {
             return;  // Don't forward request
@@ -265,12 +301,12 @@ public class Receiver extends Thread implements IProtocolManager {
 //                    "     reqID = " + message.getRequestID() +
 //                    "\n   new cost = " + message.getRouteCost() + " / " + message.getLowLQlinkCount() +
 //                    "\n   old cost = " + entry.routeCost + " / " + entry.lowLQlinkCount);
-            }
-            if (entry != null && entry.activityFlag && 
-                    (entry.lowLQlinkCount < message.getLowLQlinkCount() ||
-                    (entry.lowLQlinkCount == message.getLowLQlinkCount() &&
-                     entry.routeCost <= message.getRouteCost()))) {
-                return;     // already have forwarded a better route request
+                if (entry.activityFlag
+                        && (entry.lowLQlinkCount < message.getLowLQlinkCount()
+                        || (entry.lowLQlinkCount == message.getLowLQlinkCount()
+                        && entry.routeCost <= message.getRouteCost()))) {
+                    return;     // already have forwarded a better route request
+                }
             }
             // remove old request & replace with new one so request timeout is set properly
             requestTable.removeOutstandingRequest(message.getDestAddress(),
@@ -324,7 +360,9 @@ public class Receiver extends Thread implements IProtocolManager {
      * @param message
      * @param lastHop
      */
-    private void handleLQREQMessage(LQREQ message, long requestor) {
+    private void handleLQREQMessage(ReceivedPacket receivedPacket) {
+        LQREQ message = (LQREQ)receivedPacket.message;
+        long requestor = receivedPacket.messageSender;
 //        System.out.println("Received LQREQ from " + IEEEAddress.toDottedHex(requestor));
         NbrLinkInfo info = linkMonitor.getNbrLinkInfoWithAddress(requestor);
         if (info == null) {
@@ -341,7 +379,9 @@ public class Receiver extends Thread implements IProtocolManager {
      * @param message
      * @param lastHop
      */
-    private void handleLQREPMessage(LQREP message, long lastHop) {
+    private void handleLQREPMessage(ReceivedPacket receivedPacket) {
+        LQREP message = (LQREP)receivedPacket.message;
+        long lastHop = receivedPacket.messageSender;
         linkMonitor.setNbrLQ(lastHop, message.getRouteCost());
 //        System.out.println("Received LQREP from " + IEEEAddress.toDottedHex(lastHop));
     }
@@ -371,7 +411,7 @@ public class Receiver extends Thread implements IProtocolManager {
                 break;
             case Constants.RERR_TYPE:
 //                Debug.print("receiveData: RERR from " + IEEEAddress.toDottedHex(headerInfo.sourceAddress), 1);
-                messageQueue.put(new ReceivedPacket(new RERR(payload), headerInfo.sourceAddress));
+                messageQueue.put(new ReceivedPacket(new RERR(payload), headerInfo.sourceAddress, headerInfo.destinationAddress == 0xffff));
                 break;
 
             case Constants.LQREQ_TYPE:
@@ -384,7 +424,7 @@ public class Receiver extends Thread implements IProtocolManager {
                 break;
 
             default:
-                System.err.println("receiveData: bad packet from"
+                System.err.println("[LQRP] processIncomingData: bad packet from"
                         + IEEEAddress.toDottedHex(headerInfo.sourceAddress));
                 break;
         }
@@ -394,9 +434,17 @@ public class Receiver extends Thread implements IProtocolManager {
         public ReceivedPacket(LQRPMessage message, long messageSender) {
             this.message = message;
             this.messageSender = messageSender;
+            this.broadcast = false;
         }
         
+        public ReceivedPacket(LQRPMessage message, long messageSender, boolean broadcast) {
+            this.message = message;
+            this.messageSender = messageSender;
+            this.broadcast = broadcast;
+        }
+
         public LQRPMessage message;
         public long messageSender;
+        public boolean broadcast;
     }
 }

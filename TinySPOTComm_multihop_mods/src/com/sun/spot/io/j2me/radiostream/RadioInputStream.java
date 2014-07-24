@@ -90,6 +90,9 @@ public class RadioInputStream extends InputStream implements IRadioControl {
 	 * @see java.io.InputStream#read()
 	 */
 	public int read() throws IOException {
+        if (closed) {
+            throw new IOException("Cannot read from a closed stream");
+        }
 		while (payloadIndex >= endOfDataIndex) {
 			getPacket();
 		}
@@ -104,6 +107,9 @@ public class RadioInputStream extends InputStream implements IRadioControl {
      * @throws java.io.IOException 
      */
 	public int available() throws IOException {
+        if (closed) {
+            throw new IOException("Cannot read from a closed stream");
+        }
 		while (payloadIndex >= endOfDataIndex) {
 			//nothing in current packet
 			if (protMgr.packetsAvailable(connectionID)) {

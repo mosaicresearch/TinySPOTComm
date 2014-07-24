@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -24,13 +24,14 @@
 
 package com.sun.spot.peripheral;
 
+import com.sun.spot.resources.Resource;
 import java.io.*;
 
 import com.sun.spot.util.Utils;
 import com.sun.squawk.*;
 import com.sun.squawk.vm.*;
 
-class USBPowerDaemon implements IDriver, IUSBPowerDaemon {
+class USBPowerDaemon extends Resource implements IDriver, IUSBPowerDaemon {
 
 	// states as reported by the C code
 	static final int USB_STATE_RESET		= 0;
@@ -45,6 +46,7 @@ class USBPowerDaemon implements IDriver, IUSBPowerDaemon {
     public static final int EVENT_TIMEOUT    = 4;
 	
     private ILTC3455 ltc;
+    private IPowerController pwr;
     private int currentState;
     private int currentUSBState;
     private PIOPin usbPwrPin;
@@ -52,8 +54,10 @@ class USBPowerDaemon implements IDriver, IUSBPowerDaemon {
     private TimerThread timerThread;
     protected boolean usbPowerIsAvailable;
 
+
     public USBPowerDaemon(ILTC3455 ltc, PIOPin usbPwrPin) {
         this.ltc = ltc;
+        pwr = Spot.getInstance().getPowerController();
         this.usbPwrPin = usbPwrPin;
         ltc.setSuspended(false);
         currentState = STATE_UNCONNECTED;
@@ -61,10 +65,14 @@ class USBPowerDaemon implements IDriver, IUSBPowerDaemon {
 
     public void startThreads() {
         setUp();
-        Thread powerStateChangeThread = new PowerStateChangeThread();
-        VM.setAsDaemonThread(powerStateChangeThread);
-        powerStateChangeThread.setPriority(Thread.MAX_PRIORITY - 1);
-        powerStateChangeThread.start();
+        if (usbPwrPin != null) {
+            Thread powerStateChangeThread = new PowerStateChangeThread();
+            VM.setAsDaemonThread(powerStateChangeThread);
+            powerStateChangeThread.setPriority(Thread.MAX_PRIORITY - 1);
+            powerStateChangeThread.start();
+        } else {
+            ((FiqInterruptDaemon)Spot.getInstance().getFiqInterruptDaemon()).setUSBPowerHandler(this);
+        }
         Thread usbStateChangeThread = new UsbStateChangeThread();
         VM.setAsDaemonThread(usbStateChangeThread);
         usbStateChangeThread.setPriority(Thread.MAX_PRIORITY - 1);
@@ -78,19 +86,44 @@ class USBPowerDaemon implements IDriver, IUSBPowerDaemon {
         }
 
         public void run() {
+            int UDP_ID_MASK = Spot.getInstance().getAT91_Peripherals().UDP_ID_MASK;
             while (true) {
                 try {
-                    VM.waitForInterrupt(IAT91_Peripherals.UDP_ID_MASK);
+                    VM.waitForInterrupt(UDP_ID_MASK);
                     int newState = getUsbState();
                     if (currentUSBState != newState) {
                         int event = determineUSBEvent(newState);
                         currentUSBState = newState;
+//                        Utils.log("[USB Power Daemon] USB state changed to "
+//                                + (newState == USB_STATE_CONFIGURED ? "Configured"
+//                                : (newState == USB_STATE_RESET ? "reset"
+//                                : (newState == USB_STATE_READY ? "ready" : "unknown"))));
                         processEvent(event);
                     }
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
             }
+        }
+    }
+
+    /**
+     * Called by FiqInterruptDaemon when power changes.
+     *
+     * @param extPowerOn true if Vext or Vusb is on
+     */
+    void powerChangeEvent(boolean extPowerOn) {
+        if (extPowerOn) {
+            if (usbPowerIsAvailable != isUsbPowered()) {
+                usbPowerIsAvailable = !usbPowerIsAvailable;
+                int event = usbPowerIsAvailable ? EVENT_POWER_ON : EVENT_POWER_OFF;
+                Utils.log("[USB Power Daemon] USB power state changed to " + (usbPowerIsAvailable ? "on" : "off"));
+                processEvent(event);
+            }
+        } else if (usbPowerIsAvailable) {
+            usbPowerIsAvailable = false;
+            Utils.log("[USB Power Daemon] USB power state changed to off");
+            processEvent(EVENT_POWER_OFF);
         }
     }
 
@@ -131,7 +164,7 @@ class USBPowerDaemon implements IDriver, IUSBPowerDaemon {
     }
 
     synchronized void processEvent(int event) {
-//		Spot.getInstance().log("[USB Power Daemon] Processing event " + event + " in state " + currentState);
+//		Utils.log("[USB Power Daemon] Processing event " + event + " in state " + currentState);
         switch (event) {
             case EVENT_POWER_ON:
                  {
@@ -191,7 +224,7 @@ class USBPowerDaemon implements IDriver, IUSBPowerDaemon {
                         case STATE_AWAITING_ENUM:
                             cancelTimer();
                             Utils.log("[USB Power Daemon] Setting to high USB power because of enumeration");
-                            ltc.setHighPower(true);
+                            setHighPowerOn();
                             currentState = STATE_ENUMERATED;
                             break;
                         case STATE_ENUMERATED:
@@ -209,7 +242,7 @@ class USBPowerDaemon implements IDriver, IUSBPowerDaemon {
                         break;
                     case STATE_AWAITING_ENUM:
                         Utils.log("[USB Power Daemon] Setting to high USB power because of timeout");
-                        ltc.setHighPower(true);
+                        setHighPowerOn();
                         currentState = STATE_BATTERY;
                         break;
                     case STATE_ENUMERATED:
@@ -275,7 +308,9 @@ class USBPowerDaemon implements IDriver, IUSBPowerDaemon {
     }
 
     public boolean tearDown() {
-        usbPwrPin.release();
+        if (usbPwrPin != null) {
+            usbPwrPin.release();
+        }
         return true;
     }
 
@@ -286,34 +321,36 @@ class USBPowerDaemon implements IDriver, IUSBPowerDaemon {
     	// Called on startup and on return from deep sleep
     	// On entry, currentState will be either STATE_UNCONNECTED or STATE_BATTERY
     	// and it can only be STATE_BATTERY if we are returning from deep sleep
-        usbPwrPin.claim();
-        usbPwrPin.openForInput();
-        usbPowerIsAvailable = usbPwrPin.isHigh();
-        if (usbPowerIsAvailable) {
-        	currentUSBState = getUsbState();
-        	if (currentUSBState == USB_STATE_CONFIGURED || currentUSBState == USB_STATE_READY) {
-        		Utils.log("[USB Power Daemon] Setting to USB high power in setUp because enumerated");
-        		ltc.setHighPower(true);        		
-        		currentState = STATE_ENUMERATED;
-        	} else {
-	        	if (currentState == STATE_BATTERY) {
-	        		Utils.log("[USB Power Daemon] Setting to USB high power in setUp because of previous power");
-	        		ltc.setHighPower(true); // NB this fails to cope with case where a dumb power cable was replaced
-	        								// with a real one during deep sleep
-	        								// Note that for a rev 7 board high power will already be set because
-	        								// the pctrl will have retained that setting, but for rev 6 and earlier
-	        								// we need to reestablish the condition
-	        	} else {
-	        		processEvent(EVENT_POWER_ON); // start the timer etc
-	        	}
-        	}
-        } else {
-        	if (currentState == STATE_BATTERY) {
-        		// the cable has been unplugged while we were asleep
-        		processEvent(EVENT_POWER_OFF);
-        	}
+        if (usbPwrPin != null) {
+            usbPwrPin.claim();
+            usbPwrPin.openForInput();
+            usbPwrPin.pio.enableIrq(usbPwrPin.pin);
         }
-        usbPwrPin.pio.enableIrq(usbPwrPin.pin);
+        usbPowerIsAvailable = isUsbPowered();
+        if (usbPowerIsAvailable) {
+            currentUSBState = getUsbState();
+            if (currentUSBState == USB_STATE_CONFIGURED || currentUSBState == USB_STATE_READY) {
+                Utils.log("[USB Power Daemon] Setting to USB high power in setUp because enumerated");
+                setHighPowerOn();
+                currentState = STATE_ENUMERATED;
+            } else {
+                if (currentState == STATE_BATTERY) {
+                    Utils.log("[USB Power Daemon] Setting to USB high power in setUp because of previous power");
+                    setHighPowerOn(); // NB this fails to cope with case where a dumb power cable was replaced
+                    // with a real one during deep sleep
+                    // Note that for a rev 7 board high power will already be set because
+                    // the pctrl will have retained that setting, but for rev 6 and earlier
+                    // we need to reestablish the condition
+                } else {
+                    processEvent(EVENT_POWER_ON); // start the timer etc
+                }
+            }
+        } else {
+            if (currentState == STATE_BATTERY) {
+                // the cable has been unplugged while we were asleep
+                processEvent(EVENT_POWER_OFF);
+            }
+        }
     }
 
     void setCurrentState(int state) {
@@ -335,7 +372,20 @@ class USBPowerDaemon implements IDriver, IUSBPowerDaemon {
      * @see com.sun.squawk.peripheral.spot.IUSBPowerDaemon#isUsbPowered()
      */
     public boolean isUsbPowered() {
-        return usbPowerIsAvailable;
+        if (usbPwrPin != null) {
+            return usbPwrPin.isHigh();
+        } else {
+            return pwr.getVusb() > 4500;
+        }
+    }
+
+    private void setHighPowerOn() {
+        ltc.setHighPower(true);
+        Utils.sleep(50);
+        if (pwr.getVusb() <= 4500) {
+            ltc.setHighPower(false);
+            Utils.log("[USB Power Daemon] Setting back to USB low power because of voltage dip");
+        }
     }
 
     public boolean isUsbEnumerated() {

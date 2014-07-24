@@ -46,7 +46,7 @@ import com.sun.spot.peripheral.Spot;
 import com.sun.spot.peripheral.TimeoutException;
 import com.sun.spot.peripheral.radio.RadioFactory;
 import com.sun.spot.peripheral.radio.routing.RouteInfo;
-import com.sun.spot.service.ServiceRegistry;
+import com.sun.spot.resources.Resources;
 import com.sun.spot.util.IEEEAddress;
 import com.sun.spot.util.Properties;
 import com.sun.spot.util.Utils;
@@ -64,7 +64,7 @@ import javax.microedition.io.DatagramConnection;
  */
 public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
     private static final int MAJOR_VERSION     = 1;
-    private static final int MINOR_VERSION     = 0;
+    private static final int MINOR_VERSION     = 1;
 
     /**
      * Security levels: see OTACommandProcessor. Level 2 implies only the
@@ -199,7 +199,7 @@ public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
 //                        "suiteId: " + suiteId + ", midletId: " + midletId);
                 
                 // Create a response ...
-                res = IsolateManager.startApp(suiteId, midletId);
+                res = IsolateManager.startIsolate(suiteId, midletId);
             } catch (Exception e) {
                 System.err.println("startapp caught " + e);
                 e.printStackTrace();
@@ -215,7 +215,7 @@ public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
 //                Utils.log("Executing PAUSE_APP_CMD with " +
 //                        "isolateId: " + isolateId);                
                 // Create a response ...
-                res = IsolateManager.pauseApp(isolateId);
+                res = IsolateManager.pauseIsolate(isolateId);
             } catch (Exception e) {
                 System.err.println("pauseapp caught " + e);
                 e.printStackTrace();
@@ -232,7 +232,7 @@ public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
                 //        "isolateId: " + isolateId);
                 
                 // Create a response ...
-                res = IsolateManager.resumeApp(isolateId);
+                res = IsolateManager.resumeIsolate(isolateId);
             } catch (Exception e) {
                 System.err.println("resumeapp caught " + e);
                 e.printStackTrace();
@@ -249,7 +249,7 @@ public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
                 // "isolateId: " + isolateId);
                 
                 // Create a response ...
-                res = IsolateManager.stopApp(isolateId);
+                res = IsolateManager.stopIsolate(isolateId);
             } catch (Exception e) {
                 System.err.println("stopapp caught " + e);
                 e.printStackTrace();
@@ -263,7 +263,7 @@ public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
             try {
                 // Create a response ...
                 encodedResponse = createAllAppsStatusResponse(
-                        IsolateManager.getAllAppsStatus());
+                        IsolateManager.getAllIsolateStatus());
             } catch (Exception e) {
                 System.err.println("getallappsstatus caught " + e);
                 e.printStackTrace();
@@ -278,7 +278,7 @@ public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
                 //        "isolateId: " + isolateId);
                 
                 // Create a response ...
-                res = IsolateManager.getAppStatus(isolateId);
+                res = IsolateManager.getIsolateStatus(isolateId);
             } catch (Exception e) {
                 System.err.println("getappstatus caught " + e);
                 e.printStackTrace();
@@ -338,7 +338,7 @@ public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
 //                        address + ", copyFlag: " + copyFlag);
                 
                 // Create a response ...
-                res = IsolateManager.migrateApp(isolateId, address,
+                res = IsolateManager.migrateIsolate(isolateId, address,
                         (copyFlag.startsWith("t") ? true : false));
             } catch (Exception e) {
                 System.err.println("migrateapp caught " + e);
@@ -358,7 +358,7 @@ public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
 //                        address);
                 
                 // Create a response ...
-                res = IsolateManager.receiveApp(isolateId, address);
+                res = IsolateManager.receiveIsolate(isolateId, address);
             } catch (Exception e) {
                 System.err.println("receiveapp caught " + e);
                 e.printStackTrace();
@@ -457,9 +457,9 @@ public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
         idx += 2;
         Utils.writeBigEndShort(val, idx, (short) pctrl.getVusb());
         idx += 2;
-        Utils.writeBigEndShort(val, idx, (short) pctrl.getPowerStatus());
+        Utils.writeBigEndShort(val, idx, (short) pctrl.getPowerFault());
         idx += 2;
-        Utils.writeBigEndShort(val, idx, (short) pctrl.getStatus());
+        Utils.writeBigEndShort(val, idx, (short) pctrl.getEvents());
         idx += 2;
         Utils.writeBigEndShort(val, idx, (short) pctrl.getStartupTime());
         idx += 2;
@@ -528,6 +528,9 @@ public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
     	dos.writeShort(suites.length);
     	for (int i = 0; i < suites.length; i++) {
             dos.writeUTF(suites[i].getURI());
+            dos.writeUTF(suites[i].getVendor());
+            dos.writeUTF(suites[i].getName());
+            dos.writeUTF(suites[i].getVersion());
             dos.writeUTF(suites[i].getSourcePath());
             dos.writeInt(suites[i].getLength());
             dos.writeLong(suites[i].getLastModified());
@@ -685,7 +688,7 @@ public class SpotWorldCommand implements ISpotAdminConstants, IOTACommand {
     }
 
     public static Vector doRemoteGetPhysicalNeighbors() {
-        ISpotRadioHelper radioManager = (ISpotRadioHelper)(ServiceRegistry.getInstance().lookup(ISpotRadioHelper.class));
+        ISpotRadioHelper radioManager = (ISpotRadioHelper)Resources.lookup(ISpotRadioHelper.class);
         Vector results = new Vector();
 		DatagramConnection inConn = null;
         DatagramConnection outConn = null;
@@ -744,7 +747,7 @@ nextPing:
     }
 
     private byte[] createRemotePingResponse() throws Exception {
-        ISpotRadioHelper radioManager = (ISpotRadioHelper)(ServiceRegistry.getInstance().lookup(ISpotRadioHelper.class));
+        ISpotRadioHelper radioManager = (ISpotRadioHelper)Resources.lookup(ISpotRadioHelper.class);
         if (radioManager == null || !radioManager.getDatagramConnectionProtocol().startsWith("radiogram")) {
             byte[] res = {(byte) MAJOR_VERSION, (byte) MINOR_VERSION, 0, 0 };
             return res;
@@ -777,7 +780,7 @@ nextPing:
         byte[] blackbytes = blackList == null ? new byte[0] : blackList.getBytes();
         String name = "unknown";
         boolean mutable = false;
-        ISpotRadioHelper radioManager = (ISpotRadioHelper)(ServiceRegistry.getInstance().lookup(ISpotRadioHelper.class));
+        ISpotRadioHelper radioManager = (ISpotRadioHelper)Resources.lookup(ISpotRadioHelper.class);
         if (radioManager != null) {
             name = radioManager.getRoutingManagerName();
             mutable = radioManager.isMutableRoutingManager();
@@ -809,7 +812,7 @@ nextPing:
 
     private byte[] createGetRouteResponse(long dest) throws Exception {
         byte[] noRoute = {(byte) MAJOR_VERSION, (byte) MINOR_VERSION, 0, 0};
-        ISpotRadioHelper radioManager = (ISpotRadioHelper)(ServiceRegistry.getInstance().lookup(ISpotRadioHelper.class));
+        ISpotRadioHelper radioManager = (ISpotRadioHelper)Resources.lookup(ISpotRadioHelper.class);
         if (radioManager == null) {
             return noRoute;
         }

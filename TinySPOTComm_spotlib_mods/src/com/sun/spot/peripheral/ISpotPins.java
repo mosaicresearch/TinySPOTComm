@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -24,6 +24,8 @@
 
 package com.sun.spot.peripheral;
 
+import com.sun.spot.resources.IResource;
+
 /**
  * Interface to provide PIOPin objects representing pins assigned to
  * various external functions on the Spot board. This allows the state
@@ -32,7 +34,7 @@ package com.sun.spot.peripheral;
  * @author Syntropy
  */
 
-public interface ISpotPins {
+public interface ISpotPins extends IResource {
 	
 	
 	/**
@@ -156,20 +158,20 @@ public interface ISpotPins {
 	PIOPin getTC_TIOB(int tcNum);
 
 	/**
-	 * The low-order bit of the hardware rev
-	 * @return Returns the BD_REV0
+	 * The pin used to control the LED_BLANK signal to the rev 8 eDemoboard
+	 * @return the pin
 	 */
-	PIOPin getBD_REV0();
-	
+	PIOPin getLED_BlankPin();
+
 	/**
-	 * The mid-order bit of the hardware rev
-	 * @return Returns the BD_REV1
+	 * The pin used to control the LED_MODE signal to the rev 8 eDemoboard
+	 * @return the pin
 	 */
-	PIOPin getBD_REV1();
-	
+	PIOPin getLED_ModePin();
+
 	/**
-	 * The high-order bit of the hardware rev
-	 * @return Returns the BD_REV2
+	 * The pin used to enable the 5V power on the rev 8 eDemoboard
+	 * @return the pin
 	 */
-	PIOPin getBD_REV2();
+    PIOPin get5V_PowerEnablePin();
 }

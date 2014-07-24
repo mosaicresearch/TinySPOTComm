@@ -1,5 +1,6 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2010 Oracle. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -17,15 +18,16 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA
  * 
- * Please contact Sun Microsystems, Inc., 16 Network Circle, Menlo
- * Park, CA 94025 or visit www.sun.com if you need additional
- * information or have any questions.
+ * Please contact Oracle, 16 Network Circle, Menlo Park, CA 94025 or
+ * visit www.oracle.com if you need additional information or have
+ * any questions.
  */
 
 package com.sun.spot.peripheral.radio;
 
 import com.sun.spot.peripheral.ChannelBusyException;
 import com.sun.spot.peripheral.NoAckException;
+import com.sun.spot.service.IService;
 
 /**
  * Acts like a basic pass through layer that's responsible for sending/receiving
@@ -36,7 +38,7 @@ import com.sun.spot.peripheral.NoAckException;
  * @author Allen Ajit George, Jochen Furthmueller
  * @version 0.1
  */
-public interface IRadioPacketDispatcher {
+public interface IRadioPacketDispatcher extends IService {
 
     /**
      * Called by LowPan to initialize the dispatcher.
@@ -59,6 +61,14 @@ public interface IRadioPacketDispatcher {
     public void sendPacket(RadioPacket rp)
     throws NoAckException, ChannelBusyException;
     
+    /**
+     * Get the MAC associated with the specified address.
+     *
+     * @param address to lookup
+     * @return the I802_15_4_MAC associated with the address
+     */
+    public I802_15_4_MAC getMAC(long address);
+
     /**
      * Register to be notified with Link Quality information.
      * @param packetListener the class that wants to be called back

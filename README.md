@@ -25,6 +25,9 @@ some libraries of the SunSPOT SDK will be altered
 3) Checkout the correct 'tag' for your SunSPOT Distribution
     * The 'blue' tag is the last stable version for the SunSPOT blue sdk
     * The 'red' tag is the last stable version for the SunSPOT red sdk
+    * The 'yellow' tag is the last stable version for the SunSPOT yellow sdk
+	Big Thanks to Mas-ud Hussain from the Department of EECS, Northwestern University
+	for porting the TinySPOTComm project to the Yellow SDK
 
 3) Run 'ant prepare' from the directory where you downloaded TinySPOTComm. The ant script will now
    update your SunSPOT SDK files and create a new library.
@@ -49,5 +52,3 @@ Final notes
 ===========
 
 - Please note that TinySPOTComm does NOT provide muli-hop support for communication with TinyOS nodes.
-- Currently only the 'blue' and 'red' releases of the SunSPOT SDK are supported. The 'Yellow' release is NOT 
-supported.

@@ -1,5 +1,6 @@
 /*
  * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2010 Oracle. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -17,9 +18,9 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA
  * 
- * Please contact Sun Microsystems, Inc., 16 Network Circle, Menlo
- * Park, CA 94025 or visit www.sun.com if you need additional
- * information or have any questions.
+ * Please contact Oracle, 16 Network Circle, Menlo Park, CA 94025 or
+ * visit www.oracle.com if you need additional information or have
+ * any questions.
  */
 
 package com.sun.spot.peripheral.ota;
@@ -34,15 +35,15 @@ import java.util.Enumeration;
 import com.sun.spot.flashmanagement.FlashFile;
 import com.sun.spot.flashmanagement.IFAT;
 import com.sun.spot.flashmanagement.IFlashFileInfo;
+import com.sun.spot.imp.MIDletDescriptor;
 import com.sun.spot.imp.MIDletSuiteDescriptor;
 import com.sun.spot.io.j2me.remoteprinting.IRemotePrintManager;
 import com.sun.spot.peripheral.ConfigPage;
-import com.sun.spot.peripheral.ILed;
 import com.sun.spot.peripheral.IPowerController;
 import com.sun.spot.peripheral.ISpot;
-import com.sun.spot.service.IService;
+import com.sun.spot.resources.IResource;
+import com.sun.spot.resources.Resources;
 import com.sun.spot.service.ISpotBlink;
-import com.sun.spot.service.ServiceRegistry;
 import com.sun.spot.util.IEEEAddress;
 import com.sun.spot.util.Properties;
 import com.sun.spot.util.Utils;
@@ -111,7 +112,7 @@ class OTADefaultCommands extends Thread implements ISpotAdminConstants, IOTAComm
 
 	private void processBlinkCmd(DataInputStream params, IOTACommandHelper helper) throws IOException {
 		int duration = params.readInt();
-        IService s [] = ServiceRegistry.getInstance().lookupAll(ISpotBlink.class);
+        IResource s [] = Resources.lookupAll(ISpotBlink.class);
         for (int i = 0; i < s.length; i++) {
             ((ISpotBlink)s[i]).blink(duration);
         }
@@ -169,6 +170,13 @@ class OTADefaultCommands extends Thread implements ISpotAdminConstants, IOTAComm
 	}
 
 	private void processStartVMCmd() {
+        new Thread("kill VM") {
+            public void run() {
+                Utils.sleep(3000);
+                VM.println("[OTA] VM did not shut down within 3 seconds: Halting VM");
+                VM.haltVM(0);
+            }
+        }.start();
 		VM.stopVM(0);
 	}
 
@@ -184,62 +192,94 @@ class OTADefaultCommands extends Thread implements ISpotAdminConstants, IOTAComm
 	}
 
 	private void processFlashAppCmd(DataInputStream params, IOTACommandHelper helper) throws IOException {
-		String fileNameOnTarget = params.readUTF();
-		FlashFile suiteFile = new FlashFile(fileNameOnTarget);
-		String currentSuiteUri = Isolate.currentIsolate().getParentSuiteSourceURI();
+        try {
+            String fileNameOnTarget = params.readUTF();
+            boolean deleteAppSuites = params.readBoolean();
+            FlashFile suiteFile = new FlashFile(fileNameOnTarget);
 
-		boolean isReplacingCurrentAppSuite = fileNameOnTarget.equals(currentSuiteUri);
-		boolean isRunningLibrary = currentSuiteUri.equals(ConfigPage.LIBRARY_URI);
-		boolean isLibrarySuiteObsolete = new FlashFile("obsolete:" + ConfigPage.LIBRARY_URI).exists();
-		boolean isMasterAppSuiteObsolete = !isRunningLibrary && new FlashFile("obsolete:" + currentSuiteUri).exists();
-		
-		/*
-		 *   ircas   irl    ilso   imaso      action
-		 *   0       x       0       0        delete if exists and not in use, flash
-		 *   0       0       0       1        error return "Attempt to flash child suite while update to master is pending"
-		 *   0       1       0       1        cannot happen
-		 *   0       x       1       x        error return "Attempt to flash application suite while update to library is pending"
-		 *   1       0       x       0        obsolete master app, then flash
-		 *   1       0       x       1        flash master app
-		 *   1       1       x       x        cannot happen
-		 *   
-		 */
-		
-		if (!isReplacingCurrentAppSuite) {
-			if (isLibrarySuiteObsolete) {
-				helper.sendErrorDetails("Attempt to flash application suite while update to library is pending");
-				return;				
-			}
-			if (isMasterAppSuiteObsolete) {
-				helper.sendErrorDetails("Attempt to flash child suite while update to master is pending"); // because if we
-					// allowed this we'd need to perform a remap of the MMU, which would cause us to start executing the
-					// new bytecodes of the pending master app
-				return;
-			}
-			if (suiteFile.exists()) {
-				if (helper.isSuiteInUse(fileNameOnTarget)) {
-					helper.sendErrorDetails("Attempt to replace child suite that is in use");
-					return;
-				}
-				VM.unregisterSuite(fileNameOnTarget);
-				suiteFile.delete();
-			}
-		}
-		int virtualAddress;
-		FlashFile currentFile = new FlashFile(fileNameOnTarget);
-		if (currentFile.exists()) {
-			virtualAddress = currentFile.getVirtualAddress();
-		} else {
-			virtualAddress = FlashFile.getUnusedVirtualAddress();
-		}
-		helper.sendPrompt();
-		Utils.log("[OTA] Flashing suite: " + fileNameOnTarget);
-		helper.replaceSuiteFile(params, fileNameOnTarget, virtualAddress);
-		if (!isReplacingCurrentAppSuite) {
-			Utils.log("[OTA] remapping virtual addresses...");
-			suiteFile.map();
-		}
-		helper.sendPrompt();
+            if (deleteAppSuites) {
+                MIDletSuiteDescriptor[] mds = MIDletSuiteDescriptor.getAllInstances();
+                for (int i = 0; i < mds.length; i++) {
+                    MIDletSuiteDescriptor msd = mds[i];
+                    String uri = msd.getURI();
+                    boolean notLibrary = ! uri.equals(ConfigPage.LIBRARY_URI);
+                    boolean notSameAsIncoming = ! uri.equals(fileNameOnTarget);
+                    if (notLibrary && notSameAsIncoming) {
+                        //If library or same as incoming flash file, then leave it to be handled below.
+                        if (helper.isSuiteInUse(uri)) {
+                             new FlashFile(uri).setObsolete(true);
+                        } else {
+                            new FlashFile(uri).delete();
+                        }
+                    }
+                }
+            }
+
+            boolean isLibrarySuiteObsolete = new FlashFile("obsolete:" + ConfigPage.LIBRARY_URI).exists();
+            boolean isReplacingCurrentAppSuite = false;
+            Isolate isos[] = Isolate.getIsolates();
+            for (int i = 0; i < isos.length; i++) {
+                String suiteUri = isos[i].getParentSuiteSourceURI();
+                if (fileNameOnTarget.equals(suiteUri)) {
+                    isReplacingCurrentAppSuite = true;
+                    break;
+                }
+            }
+
+            /*
+             *   Old table:
+             *
+             *   ircas   irl    ilso   imaso      action
+             *   0       x       0       0        delete if exists and not in use, flash
+             *   0       0       0       1        error return "Attempt to flash child suite while update to master is pending"
+             *   0       1       0       1        cannot happen
+             *   0       x       1       x        error return "Attempt to flash application suite while update to library is pending"
+             *   1       0       x       0        obsolete master app, then flash
+             *   1       0       x       1        flash master app
+             *   1       1       x       x        cannot happen
+             *
+             *   New table:
+             *
+             *   ircas          ilso              action
+             *   0               0                delete if exists and not in use, flash
+             *   0               1                error return "Attempt to flash application suite while update to library is pending"
+             *   1               x                obsolete app, then flash
+             *
+             */
+
+            if (!isReplacingCurrentAppSuite) {
+                if (isLibrarySuiteObsolete) {
+                    helper.sendErrorDetails("Attempt to flash application suite while update to library is pending");
+                    return;
+                }
+                if (suiteFile.exists()) {
+                    if (helper.isSuiteInUse(fileNameOnTarget)) {
+                        helper.sendErrorDetails("Attempt to replace child suite that is in use");
+                        return;
+                    }
+                    VM.unregisterSuite(fileNameOnTarget);
+                    suiteFile.delete();
+                }
+            }
+            int virtualAddress;
+            FlashFile currentFile = new FlashFile(fileNameOnTarget);
+            if (currentFile.exists()) {
+                virtualAddress = currentFile.getVirtualAddress();
+            } else {
+                virtualAddress = FlashFile.getUnusedVirtualAddress();
+            }
+            helper.sendPrompt();
+            Utils.log("[OTA] Flashing suite: " + fileNameOnTarget);
+            helper.replaceSuiteFile(params, fileNameOnTarget, virtualAddress);
+            if (!isReplacingCurrentAppSuite) {
+                Utils.log("[OTA] remapping virtual addresses...");
+                suiteFile.map();
+            }
+            helper.sendPrompt();
+        } catch (IOException ex) {
+            helper.sendErrorDetails("Error in flashapp: " + ex);
+            throw ex;
+        }
 	}
 
 	private void processUndeployCmd(DataInputStream params, IOTACommandHelper helper) throws IOException {
@@ -267,7 +307,27 @@ class OTADefaultCommands extends Thread implements ISpotAdminConstants, IOTAComm
 	private void processResyncCmd(IOTACommandHelper helper) throws IOException {
 		sendUTF(helper.getDataOutputStream(), helper.getBootloaderIdentificationString());
 	}
-	
+        
+        private void processAddStartupMidletCmd(DataInputStream params, IOTACommandHelper helper) throws IOException {
+            try {
+              String suiteURI = params.readUTF();
+              String midletNum = params.readUTF();
+              IsolateManager.addStartupMidlet(suiteURI, midletNum);
+           } catch (IOException ex) {
+               helper.sendErrorDetails("Problem parsing suiteURI and/or midlet number in adding a startup midlet.");
+           }
+        }
+
+        private void processRemoveStartupMidletCmd(DataInputStream params, IOTACommandHelper helper) throws IOException{
+            try {
+              String suiteURI = params.readUTF();
+              String midletNum = params.readUTF();
+              IsolateManager.removeStartupMidlet(suiteURI, midletNum);
+            } catch (IOException ex) {
+               helper.sendErrorDetails("Problem parsing suiteURI and/or midlet number while removing a startup midlet.");
+            }
+        }
+
 	private void processGetFileInfoCmd(DataInputStream params, IOTACommandHelper helper) throws IOException {
 		String filename = params.readUTF();
 		FlashFile flashFile = new FlashFile(filename);
@@ -396,6 +456,12 @@ class OTADefaultCommands extends Thread implements ISpotAdminConstants, IOTAComm
 		});
 		repository.addCommand(RESYNC_CMD, new ExtensionWrapper(SECURITY_LEVEL_ATTENTION) {
 			public void processCommand(DataInputStream params, IOTACommandHelper helper) throws IOException { processResyncCmd(helper); }
+		});
+		repository.addCommand(ADD_STARTUP_MIDLET, new ExtensionWrapper(SECURITY_LEVEL_SETSYSTEMPROPERTY) {
+			public void processCommand(DataInputStream params, IOTACommandHelper helper) throws IOException { processAddStartupMidletCmd(params, helper); }
+		});
+		repository.addCommand(REMOVE_STARTUP_MIDLET, new ExtensionWrapper(SECURITY_LEVEL_SETSYSTEMPROPERTY) {
+			public void processCommand(DataInputStream params, IOTACommandHelper helper) throws IOException { processRemoveStartupMidletCmd(params, helper); }
 		});
 
 		repository.addCommand(CLOSEDOWN, new ExtensionWrapper(SECURITY_LEVEL_CLOSEDOWN) {

@@ -1,5 +1,6 @@
 /*
- * Copyright 2005-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2005-2009 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2010 Oracle. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  *
  * This code is free software; you can redistribute it and/or modify
@@ -17,23 +18,24 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA
  *
- * Please contact Sun Microsystems, Inc., 16 Network Circle, Menlo
- * Park, CA 94025 or visit www.sun.com if you need additional
- * information or have any questions.
+ * Please contact Oracle, 16 Network Circle, Menlo Park, CA 94025 or
+ * visit www.oracle.com if you need additional information or have
+ * any questions.
  */
 
 package com.sun.spot.peripheral.radio.shrp;
+
 import com.sun.spot.peripheral.radio.ILowPan;
-import com.sun.spot.peripheral.radio.mhrp.aodv.routing.RoutingEntry;
 import com.sun.spot.peripheral.radio.mhrp.interfaces.IMHEventListener;
 import com.sun.spot.peripheral.radio.routing.RouteInfo;
 import com.sun.spot.peripheral.radio.routing.RouteTable;
 import com.sun.spot.peripheral.radio.routing.interfaces.IRoutingManager;
 import com.sun.spot.peripheral.radio.routing.interfaces.RouteEventClient;
+import com.sun.spot.resources.Resources;
+import com.sun.spot.service.BasicService;
 import com.sun.spot.service.IService;
 import java.util.Enumeration;
 import java.util.Hashtable;
-import java.util.Vector;
 
 
 /**
@@ -52,12 +54,12 @@ import java.util.Vector;
 
 
 
-public class SingleHopManager implements IRoutingManager {
+public class SingleHopManager extends BasicService implements IRoutingManager {
     private int state;
-    private static String name = "SingleHopManager";
+    private String name = "SingleHopManager";
     private static SingleHopManager instance;
-    private static long ourAddress;
-    private static ILowPan lowpan;
+    private long ourAddress;
+    private ILowPan lowpan;
     private Hashtable routes;
     private Hashtable invalidRoutes;
     
@@ -77,9 +79,13 @@ public class SingleHopManager implements IRoutingManager {
      */
     public static synchronized SingleHopManager getInstance() {
         if (instance == null) {
-            instance = new SingleHopManager();
+            instance = (SingleHopManager) Resources.lookup(SingleHopManager.class);
+            if (instance == null) {
+                instance = new SingleHopManager();
+                instance.addTag("service=" + instance.getServiceName());
+                Resources.add(instance);
+            }
         }
-        
         return instance;
     }
     /**
@@ -250,6 +256,18 @@ public class SingleHopManager implements IRoutingManager {
     
     public boolean getEnabled() {
         return false;
+    }
+
+
+    /**
+     * Returns the "Network Diameter" of this mesh network. As a single hop routing manager
+     * the answer is always 1.
+     *
+     *
+     * @return the maximum number of hops across this network
+     */
+    public int getMaximumHops() {
+        return 1;
     }
     
 }

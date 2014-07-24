@@ -35,8 +35,6 @@ public class StopVMEventHandler implements IEventHandler, Runnable {
     private static int stopCount = 0;
     private static long stopTime;
 
-    private boolean halt = false;
-
 	public void signalEvent() {
         if (stopCount++ == 0) {
             stopTime = System.currentTimeMillis();
@@ -44,23 +42,15 @@ public class StopVMEventHandler implements IEventHandler, Runnable {
             t.setPriority(Thread.MAX_PRIORITY);
             t.start();  // don't define an anonymous class or else make sure emulator loads it
             Thread.yield();
-            StopVMEventHandler backup = new StopVMEventHandler();
-            backup.halt = true;
-            t = new Thread(backup);
-            t.setPriority(Thread.MAX_PRIORITY);
-            Thread.yield();
+            VM.stopVM(0);
         } else if (stopCount > RESET_OVERRIDE || (System.currentTimeMillis() - stopTime) > SHUTDOWN_MIN_TIME) {
             VM.haltVM(0);
 	    }
     }
 
     public void run() {
-        if (halt) {
-            Utils.sleep(SHUTDOWN_MIN_TIME);
-            VM.haltVM(0);
-        } else {
-            VM.stopVM(0);
-        }
+        Utils.sleep(SHUTDOWN_MIN_TIME);
+        VM.haltVM(0);
     }
 
 }

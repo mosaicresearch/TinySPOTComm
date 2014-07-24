@@ -26,6 +26,9 @@ package com.sun.spot.peripheral.radio.proxy;
 
 import com.sun.spot.peripheral.radio.IRadioProtocolManager;
 
+/**
+ * @deprecated No longer needed: all Isolates now use a global radio resource.
+ */
 public interface IRadioServerContext {
 	
 	public IRadioProtocolManager getRadioProtocolManager();

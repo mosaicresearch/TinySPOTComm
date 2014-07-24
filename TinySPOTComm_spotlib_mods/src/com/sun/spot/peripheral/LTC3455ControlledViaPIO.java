@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -24,16 +24,20 @@
 
 package com.sun.spot.peripheral;
 
+import com.sun.spot.resources.Resource;
 
-class LTC3455ControlledViaPIO implements ILTC3455, IDriver {
 
+class LTC3455ControlledViaPIO extends Resource implements ILTC3455, IDriver {
+
+	private IPowerController powerController;
 	private PIOPin usbHpPin;
 	private PIOPin usbEnPin;
 
 	/**
 	 * @param pins
 	 */
-	public LTC3455ControlledViaPIO(ISpotPins spotPins) {
+	public LTC3455ControlledViaPIO(IPowerController powerController, ISpotPins spotPins) {
+		this.powerController = powerController;
 		usbHpPin = spotPins.getUSB_HP();
 		usbEnPin = spotPins.getUSB_EN();
 		setUp();
@@ -43,7 +47,8 @@ class LTC3455ControlledViaPIO implements ILTC3455, IDriver {
 	 * @see com.sun.squawk.peripheral.spot.ILTC3455#setHighPower(boolean)
 	 */
 	public void setHighPower(boolean state) {
-		usbHpPin.setState(state);
+		usbHpPin.setState(state);               // set state & then tell power controller
+		powerController.setControl(state ? IPowerController.USB_HIGH_POWER_MODE : IPowerController.USB_LOW_POWER_MODE);
 	}
 
 	/* (non-Javadoc)
@@ -57,7 +62,8 @@ class LTC3455ControlledViaPIO implements ILTC3455, IDriver {
 	 * @see com.sun.squawk.peripheral.spot.ILTC3455#setSuspended(boolean)
 	 */
 	public void setSuspended(boolean state) {
-		usbEnPin.setState(state);
+		usbEnPin.setState(state);               // set state & then tell power controller
+        powerController.setControl(state ? IPowerController.USB_SUSPEND : IPowerController.USB_ENABLE);
 	}
 
 	/* (non-Javadoc)

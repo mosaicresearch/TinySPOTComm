@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -30,7 +30,6 @@ import java.io.IOException;
 import java.util.Enumeration;
 import java.util.Vector;
 
-import com.sun.spot.peripheral.ISpot;
 import com.sun.spot.peripheral.SpotFatalException;
 import com.sun.squawk.VM;
 import com.sun.squawk.util.Arrays;
@@ -39,16 +38,22 @@ import com.sun.squawk.util.Arrays;
  * Collection of utility functions
  */
 public class Utils {
-	public static int SIZE_OF_SHORT = 2;
-	public static int SIZE_OF_INT = 4;
-	public static int SIZE_OF_LONG = 8;
+
+	/**
+	 * System property that if true enables output of log messages on System.err
+	 */
+	public static final String PROPERTY_SPOT_DIAGNOSTICS = "spot.diagnostics";
+
+	public static final int SIZE_OF_SHORT = 2;
+	public static final int SIZE_OF_INT = 4;
+	public static final int SIZE_OF_LONG = 8;
 	
 	/**
 	 * Display a log message if the "spot.diagnostics" property is set
 	 * @param message the message to display
 	 */
 	public static void log(String message) {
-    	if (isOptionSelected(ISpot.PROPERTY_SPOT_DIAGNOSTICS, false)) {
+    	if (isOptionSelected(PROPERTY_SPOT_DIAGNOSTICS, false)) {
     		if (message.length() == 0 || message.charAt(0) != '[') {
     			System.err.print("[SpotLib] ");
     		}

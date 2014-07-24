@@ -31,9 +31,9 @@ import com.sun.spot.peripheral.radio.routing.RouteInfo;
 import com.sun.spot.peripheral.radio.routing.RouteTable;
 import com.sun.spot.peripheral.radio.routing.interfaces.IRoutingManager;
 import com.sun.spot.peripheral.radio.routing.interfaces.RouteEventClient;
+import com.sun.spot.resources.Resources;
 import com.sun.spot.service.BasicService;
 import com.sun.spot.service.ISpotRadioHelper;
-import com.sun.spot.service.ServiceRegistry;
 import com.sun.spot.util.IEEEAddress;
 import com.sun.spot.util.Utils;
 import java.util.Enumeration;
@@ -55,7 +55,8 @@ public class LowPanSpotRadioHelper extends BasicService implements ISpotRadioHel
     public static void main(String[] args) {
         Utils.log("[LowPan] radio stack initialization...");
         LowPanSpotRadioHelper rm = new LowPanSpotRadioHelper();
-        ServiceRegistry.getInstance().add(rm);
+        rm.addTag("service=" + rm.getServiceName());
+        Resources.add(rm);
     }
 
     public String getServiceName() {

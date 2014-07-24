@@ -28,9 +28,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
-import javax.microedition.io.Connection;
-import javax.microedition.io.Connector;
-import javax.microedition.io.StreamConnection;
+import javax.microedition.io.*;
 
 import com.sun.spot.io.j2me.socket.ProxyInitializer;
 import com.sun.spot.io.j2me.socket.SocketConnection;
@@ -42,27 +40,37 @@ import com.sun.squawk.io.ConnectionBase;
  *
  * @author  Martin Morissette
  */
-public class Protocol extends ConnectionBase implements StreamConnection {
+public class Protocol extends ConnectionBase implements javax.microedition.io.SocketConnection {
 
     private SocketConnection conn;
     
     private InputStream in=null;
     private OutputStream out=null;
-    
     private int mode;
-
+    protected int port;
+    
+    public Protocol() {
+    	
+    }
+    
+    public Protocol(SocketConnection connection) {
+    	this.conn = connection;
+    	mode = Connector.READ_WRITE;
+    }
+    
     /**
      * Open the connection
      * 
-     * @param name <name or IP number>:<port number>
+     * @param originalName <name or IP number>:<port number>
      * @throws IOException 
      */
-     public Connection open(String protocol, String name, int mode, boolean timeouts) throws IOException  {
+     public Connection open(String protocol, String originalName, int mode, boolean timeouts) throws IOException  {
 
         if (protocol == null || protocol.length()==0) {
             throw new IllegalArgumentException("Protocol cannot be null or empty");
         }
 
+        String name = originalName;
         if (name == null || name.length()==0) {
             throw new IllegalArgumentException("Name cannot be null or empty");
         }
@@ -78,9 +86,6 @@ public class Protocol extends ConnectionBase implements StreamConnection {
         /* Host name or IP number */
         String nameOrIP;
 
-        /* Port number */
-        int port;
-
         /* Look for the : */
         int colon = name.indexOf(':');
 
@@ -91,20 +96,21 @@ public class Protocol extends ConnectionBase implements StreamConnection {
         /* Strip off the protocol name */
         nameOrIP = name.substring(0, colon);
 
-        if (nameOrIP.length() == 0) {
-            /*
-             * If the open string is "socket://:nnnn" then we regard this as
-             * "serversocket://:nnnn"
-             */
-            // TODO: support ServerSocket
-            throw new RuntimeException("Support for Server Socket is not yet implemented");
-        }
-
         try {
             /* Get the port number */
             port = Integer.parseInt(name.substring(colon + 1));
         } catch (NumberFormatException x) {
             throw new IllegalArgumentException("Invalid port number for socket connection at " + name);
+        }
+
+        if (nameOrIP.length() == 0) {
+            /*
+             * If the open string is "socket://:nnnn" then we regard this as
+             * "serversocket://:nnnn"
+             */
+            StreamConnectionNotifier serverSocket = (StreamConnectionNotifier) new com.sun.squawk.io.j2me.serversocket.Protocol();
+            ((ConnectionBase) serverSocket).open(protocol, originalName, mode, timeouts);
+            return serverSocket;
         }
 
         conn = new SocketConnection(new ProxyInitializer(nameOrIP,String.valueOf(port)), timeouts);
@@ -162,6 +168,30 @@ public class Protocol extends ConnectionBase implements StreamConnection {
      */
     public void close() throws IOException {
         conn.close();
+    }
+
+	public String getAddress() throws IOException {
+	    return "127.0.0.1";
+    }
+
+	public String getLocalAddress() throws IOException {
+	    return "127.0.0.1";
+    }
+
+	public int getLocalPort() throws IOException {
+	    return port;
+    }
+
+	public int getPort() throws IOException {
+	    // TODO Auto-generated method stub
+	    return port;
+    }
+
+	public int getSocketOption(byte option) throws IOException {
+	    return 0;
+    }
+
+	public void setSocketOption(byte option, int value) throws IOException {
     }
 
 }

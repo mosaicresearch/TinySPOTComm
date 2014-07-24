@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2009 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2007-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -57,6 +57,11 @@ public interface IOTACommandServer extends IService {
 	 */
 	public static final String START_OTA_SESSION_CMD = "START_OTA_SESSION_CMD";
 	
+	/**
+	 * Command that we recognise to abort an existing session
+	 */
+	public static final String ABORT_OTA_SESSION_CMD = "ABORT_OTA_SESSION_CMD";
+
 	/**
 	 * Command to respond information about the SPOT 
 	 */
@@ -123,6 +128,22 @@ public interface IOTACommandServer extends IService {
 	void addListener(IOTACommandServerListener sml);
 
 	/**
+	 * Remove a listener to be notified of the start and stop of flash
+	 * operations.
+	 *
+	 * @param sml the listener
+	 */
+	void removeListener(IOTACommandServerListener sml);
+
+    /**
+     * Returns an array of all the IOTACommandServer listeners.
+     *
+     * @return all of the IOTACommandServer listeners or an empty array if no 
+     * listeners are currently registered.
+     */
+    public IOTACommandServerListener[] getListeners();
+
+    /**
 	 * Answer the IEEE address of the sender of the last command received.
 	 * 
 	 * @return -- the address

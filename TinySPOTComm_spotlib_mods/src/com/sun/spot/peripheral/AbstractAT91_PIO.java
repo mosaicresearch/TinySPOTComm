@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2007-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -24,6 +24,7 @@
 
 package com.sun.spot.peripheral;
 
+import com.sun.spot.resources.Resource;
 import com.sun.squawk.Address;
 import com.sun.squawk.Unsafe;
 
@@ -32,7 +33,7 @@ import com.sun.squawk.Unsafe;
  * @see IAT91_PIO
  *
  */
-public abstract class AbstractAT91_PIO implements IAT91_PIO {
+public abstract class AbstractAT91_PIO extends Resource implements IAT91_PIO {
 
 	protected static final int PIO_OER	= 4;           /* Output Enable Register */
     protected static final int PIO_ODR	= 5;           /* Output Disable Register */

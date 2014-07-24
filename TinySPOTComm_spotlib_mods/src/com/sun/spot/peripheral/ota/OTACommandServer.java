@@ -1,5 +1,6 @@
 /*
- * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2010 Oracle. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -17,9 +18,9 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA
  * 
- * Please contact Sun Microsystems, Inc., 16 Network Circle, Menlo
- * Park, CA 94025 or visit www.sun.com if you need additional
- * information or have any questions.
+ * Please contact Oracle, 16 Network Circle, Menlo Park, CA 94025 or
+ * visit www.oracle.com if you need additional information or have
+ * any questions.
  */
 
 package com.sun.spot.peripheral.ota;
@@ -29,7 +30,6 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.Date;
-import java.util.Enumeration;
 import java.util.Random;
 import java.util.Vector;
 
@@ -49,10 +49,14 @@ import com.sun.spot.peripheral.ITimeoutableConnection;
 import com.sun.spot.peripheral.IUSBPowerDaemon;
 import com.sun.spot.peripheral.Spot;
 import com.sun.spot.peripheral.radio.RadioPolicy;
-import com.sun.spot.service.ServiceRegistry;
-import com.sun.spot.util.CrcOutputStream;
+import com.sun.spot.resources.Resources;
+import com.sun.spot.service.BasicService;
 import com.sun.spot.util.IEEEAddress;
 import com.sun.spot.util.Utils;
+import com.sun.squawk.CrossIsolateThread;
+import com.sun.squawk.Isolate;
+import java.util.Enumeration;
+import java.util.Hashtable;
 
 /**
  * This class monitors radiogram communications on port number 8 and establishes
@@ -70,17 +74,19 @@ import com.sun.spot.util.Utils;
  * (for example, suspending) when flash operations start.<br>
  * <br>
  */
-public class OTACommandServer implements Runnable, ISpotAdminConstants, IOTACommandServer {
+public class OTACommandServer extends BasicService implements Runnable, ISpotAdminConstants,
+        IOTACommandServer, IOTACommandServerListener {
 
     private static final int MAX_HELLO_DELAY = 100;
     private static final int MAX_HELLO_RETRIES = 3;
     private static final int CRC_STREAM_BLOCK_SIZE = 2048;
 
-    private static OTACommandServer theInstance = null;
-    private static String datagramProtocol = DEFAULT_DATAGRAM_PROTOCOL;
-    private static String streamProtocol = DEFAULT_STREAM_PROTOCOL;
-    private static int datagramPort = DEFAULT_DATAGRAM_PORT;
-    private static int streamPort = DEFAULT_STREAM_PORT;
+    private static OTACommandServer theInstance;
+    
+    private String datagramProtocol = DEFAULT_DATAGRAM_PROTOCOL;
+    private String streamProtocol = DEFAULT_STREAM_PROTOCOL;
+    private int datagramPort = DEFAULT_DATAGRAM_PORT;
+    private int streamPort = DEFAULT_STREAM_PORT;
 
     private ISpotRadioHelper radioHelper = null;
 
@@ -88,6 +94,7 @@ public class OTACommandServer implements Runnable, ISpotAdminConstants, IOTAComm
     private Datagram receivedCommandRadiogram;
     private Datagram sendRadiogram;
     private Vector listeners = new Vector();
+    private Hashtable isolates = new Hashtable();
     private IPowerController powerController;
     private IBattery battery;
     private IUSBPowerDaemon usbPowerDaemon;
@@ -118,21 +125,22 @@ public class OTACommandServer implements Runnable, ISpotAdminConstants, IOTAComm
      */
     public synchronized static IOTACommandServer getInstance() {
         if (theInstance == null) {
-            theInstance = (OTACommandServer)ServiceRegistry.getInstance().lookup(OTACommandServer.class);
+            theInstance = (OTACommandServer)Resources.lookup(OTACommandServer.class);
             if (theInstance == null) {
                 Utils.log("Creating new OTACommandServer");
                 theInstance = new OTACommandServer();
-                ServiceRegistry.getInstance().add(theInstance);
+                Resources.add(theInstance);
             }
         }
         return theInstance;
     }
 
     private OTACommandServer() {
+        addTag("service=" + getServiceName());
         spot = Spot.getInstance();
         remotePrintManager = spot.getRemotePrintManager();
         powerController = spot.getPowerController();
-        radioHelper = (ISpotRadioHelper)ServiceRegistry.getInstance().lookup(ISpotRadioHelper.class);
+        radioHelper = (ISpotRadioHelper)Resources.lookup(ISpotRadioHelper.class);
         if (radioHelper != null) {
             datagramProtocol = radioHelper.getDatagramConnectionProtocol();
             streamProtocol = radioHelper.getStreamConnectionProtocol();
@@ -161,13 +169,72 @@ public class OTACommandServer implements Runnable, ISpotAdminConstants, IOTAComm
      * 
      * @param sml the listener
      */
-    public void addListener(IOTACommandServerListener sml) {
-        listeners.addElement(sml);
-        if (session != null) {
-            session.addListener(sml);
+    public void addListener(final IOTACommandServerListener sml) {
+        if (!listeners.contains(sml)) {
+            listeners.addElement(sml);
+            isolates.put(sml, Isolate.currentIsolate());
         }
     }
 
+	/**
+	 * Remove a listener to be notified of the start and stop of flash
+	 * operations.
+	 *
+	 * @param sml the listener
+	 */
+	public void removeListener(IOTACommandServerListener sml) {
+        if (listeners.removeElement(sml)) {
+            isolates.remove(sml);
+        }
+    }
+
+    /**
+     * Returns an array of all the IOTACommandServer listeners.
+     *
+     * @return all of the IOTACommandServer listeners or an empty array if no
+     * listeners are currently registered.
+     */
+    public IOTACommandServerListener[] getListeners() {
+        IOTACommandServerListener[] list = new IOTACommandServerListener[listeners.size()];
+        for (int i = 0; i < listeners.size(); i++) {
+            list[i] = (IOTACommandServerListener) listeners.elementAt(i);
+        }
+        return list;
+    }
+
+    private void runCallbacks(final boolean preFlash) {
+        for (Enumeration e = listeners.elements(); e.hasMoreElements();) {
+            final IOTACommandServerListener who = (IOTACommandServerListener) e.nextElement();
+            Isolate iso = (Isolate) isolates.get(who);
+            if (iso != null || !iso.isExited()) {
+                // run in proper context
+                new CrossIsolateThread(iso, "IOTACommandServer Listener") {
+                    public void run() {
+                        if (preFlash) {
+                            who.preFlash();
+                        } else {
+                            who.postFlash();
+                        }
+                    }
+                }.start();
+            }
+        }
+    }
+
+    /**
+	 *  Called by the OTACommandServer prior to beginning an over-the-air download
+	 */
+    public void preFlash() {
+        runCallbacks(true);
+    }
+
+	/**
+	 * Called by the OTACommandServer at the end of an over-the-air download
+	 */
+	public void postFlash() {
+        runCallbacks(false);
+    }
+    
     /**
      * Answer the IEEE address of the sender of the last command received.
      * 
@@ -272,24 +339,33 @@ public class OTACommandServer implements Runnable, ISpotAdminConstants, IOTAComm
      * Package visibility to aid testing 
      */
     void processCommand(String cmd) throws IOException {
-        if (cmd.equals(START_OTA_SESSION_CMD)) {
+        if (cmd.equals(HELLO_CMD)) {
+            sendHelloResponse();
+        } else {
             IEEEAddress remoteAddress = new IEEEAddress(receivedCommandRadiogram.getAddress());
-            if (session != null && session.isAlive()) {
-                if (!remoteAddress.equals(session.getBasestationAddress())) {
-                    Utils.log("[OTACommandServer] Already has a session with " + remoteAddress);
-                    sendErrorDetails("[OTACommandServer] Already has a session with " + remoteAddress);
+            if (cmd.equals(START_OTA_SESSION_CMD)) {
+                if (session != null && session.isAlive()) {
+                    if (!remoteAddress.equals(session.getBasestationAddress())) {
+                        Utils.log("[OTACommandServer] Request from " + remoteAddress + " but already has a session with " + session.getBasestationAddress());
+                        sendErrorDetails("[OTACommandServer] Already has a session with " + session.getBasestationAddress());
+                    } else {
+                        long now = (radioHelper != null) ? radioHelper.getTimestamp(receivedCommandRadiogram) : System.currentTimeMillis();
+                        if ((now - session.getStartTime()) > 1000) { // ignore multiple requests in last second
+                            session.closedown();
+                            startSession(remoteAddress);
+                        }
+                    }
                 } else {
-                    long now = (radioHelper != null) ? radioHelper.getTimestamp(receivedCommandRadiogram) : System.currentTimeMillis();
-                    if ((now - session.getStartTime()) > 1000) { // ignore multiple requests in last second
+                    startSession(remoteAddress);
+                }
+            } else if (cmd.equals(ABORT_OTA_SESSION_CMD)) {
+                Utils.log("[OTACommandServer] Request to end session with " + remoteAddress);
+                if (session != null && session.isAlive()) {
+                    if (remoteAddress.equals(session.getBasestationAddress())) {
                         session.closedown();
-                        startSession(remoteAddress);
                     }
                 }
-            } else {
-                startSession(remoteAddress);
             }
-        } else if (cmd.equals(HELLO_CMD)) {
-            sendHelloResponse();
         }
     }
 
@@ -345,7 +421,7 @@ public class OTACommandServer implements Runnable, ISpotAdminConstants, IOTAComm
 
             byte battStatus = 127; // choose an invalid value
             if (battery != null) {
-                battStatus = (byte) (battery.getBatteryLevel() |
+                battStatus = (byte) ((battery.getBatteryLevel() & 0x7f) |
                         ((battery.getState() == IBattery.CHARGING) ? 128 : 0));
             }
             replyRadiogram.writeByte(battStatus);
@@ -354,19 +430,19 @@ public class OTACommandServer implements Runnable, ISpotAdminConstants, IOTAComm
             coordinates[1] = System.getProperty("spot.longitude");
             coordinates[2] = System.getProperty("spot.altitude");
             if ((coordinates[0] != null) ||
-                    (coordinates[1] != null) ||
-                    (coordinates[2] != null)) {
-                // 1 indicates uncompressed latitude, longitude and
-                // altitude expressed as floats.
+                (coordinates[1] != null) ||
+                (coordinates[2] != null)) {
+                // 1 indicates uncompressed latitude, longitude and altitude expressed as floats.
                 replyRadiogram.writeByte(1);
                 float tmp = (float) 0.0;
                 for (int i = 0; i < coordinates.length; i++) {
                     try {
                         tmp = (float) 0.0;
-                        tmp = Float.parseFloat(coordinates[i]);
+                        if (coordinates[i] != null) {
+                            tmp = Float.parseFloat(coordinates[i]);
+                        }
                     } catch (Exception e) {
-                        System.err.println("Trouble parsing " +
-                                "geoCoordinate " + coordinates[i]);
+                        System.err.println("Trouble parsing geoCoordinate " + coordinates[i]);
                     }
                     replyRadiogram.writeFloat(tmp);
                 }
@@ -375,18 +451,19 @@ public class OTACommandServer implements Runnable, ISpotAdminConstants, IOTAComm
                 coordinates[1] = System.getProperty("spot.y");
                 coordinates[2] = System.getProperty("spot.z");
                 if ((coordinates[0] != null) ||
-                        (coordinates[1] != null) ||
-                        (coordinates[2] != null)) {
+                    (coordinates[1] != null) ||
+                    (coordinates[2] != null)) {
                     // 2 indicates cartesian coordinates expressed as ints
                     replyRadiogram.writeByte(2);
                     float tmp = -1;
                     for (int i = 0; i < coordinates.length; i++) {
                         try {
                             tmp = Float.MIN_VALUE;
-                            tmp = Float.parseFloat(coordinates[i]);
+                            if (coordinates[i] != null) {
+                                tmp = Float.parseFloat(coordinates[i]);
+                            }
                         } catch (Exception e) {
-                            System.err.println("Trouble parsing " +
-                                    "cartesian coordinate " + coordinates[i]);
+                            System.err.println("Trouble parsing cartesian coordinate " + coordinates[i]);
                         }
                         replyRadiogram.writeFloat(tmp);
                     }
@@ -456,16 +533,21 @@ public class OTACommandServer implements Runnable, ISpotAdminConstants, IOTAComm
     }
 
     void initializeSession(StreamConnection conn, DataInputStream dataInputStream, DataOutputStream dataOutputStream) throws IOException {
-        Enumeration enumeration = listeners.elements();
-        while (enumeration.hasMoreElements()) {
-            session.addListener((IOTACommandServerListener) enumeration.nextElement());
-        }
+        session.addListener(this);
         session.setSuspended(suspended);
         session.initialize(dataInputStream, dataOutputStream, (IRadioControl) conn);
     }
 
-    private void sendErrorDetails(String msg) throws IOException {
-        sendUTF(BOOTLOADER_CMD_HEADER + ":E " + msg.substring(0, Math.min(70, msg.length())));
+    private void sendErrorDetails(final String msg) throws IOException {
+        new Thread("send OTA error message") {
+            public void run() {
+                try {
+                    sendUTF(BOOTLOADER_CMD_HEADER + ":E " + msg.substring(0, Math.min(70, msg.length())));
+                } catch (IOException ex) {
+                    // ignore if can't report error
+                }
+            }
+        }.start();
     }
 
     private void sendUTF(String stringToSend) throws IOException {
@@ -532,7 +614,6 @@ public class OTACommandServer implements Runnable, ISpotAdminConstants, IOTAComm
         } else {
             return false;
         }
-
     }
 
     /**
@@ -627,16 +708,6 @@ public class OTACommandServer implements Runnable, ISpotAdminConstants, IOTAComm
      */
     public String getServiceName() {
         return "OTA Command Server";
-    }
-
-    /**
-     * Assign a name to this service. For some fixed services this may not apply and
-     * any new name will just be ignored.
-     *
-     * @param who the name for this service
-     */
-    public void setServiceName(String who) {
-        // ignore new name
     }
 
     /**

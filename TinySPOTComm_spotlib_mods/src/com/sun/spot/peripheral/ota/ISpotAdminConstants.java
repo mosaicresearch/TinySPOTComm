@@ -51,7 +51,9 @@ public interface ISpotAdminConstants {
 	public static final String SET_TIME_CMD 			= "DEF-ST";
 	public static final String SET_SYSTEM_PROPERTIES    = "DEF-SS";
 	public static final String SET_PUBLIC_KEY_CMD	    = "DEF-SP";
-	public static final String SET_STARTUP_CMD	    	= "DEF-SU";
+	public static final String SET_STARTUP_CMD          = "DEF-SU";
+	public static final String ADD_STARTUP_MIDLET       = "DEF-AS";
+	public static final String REMOVE_STARTUP_MIDLET    = "DEF-RSM";
 
     public static final String GET_MEMORY_STATS_CMD     = "SW-GMS";
 	public static final String GET_POWER_STATS_CMD      = "SW-GPS";
@@ -74,8 +76,8 @@ public interface ISpotAdminConstants {
 	public static final String SET_RADIO_INFO_CMD       = "SW-SRI";
 	public static final String GET_ROUTE_CMD            = "SW-GRT";
 	
-	public static final String BOOTLOADER_CMD_HEADER = "*EL*";
-	public static final String ABORT_REQUEST = BOOTLOADER_CMD_HEADER + ":A";
+	public static final String BOOTLOADER_CMD_HEADER    = "*EL*";
+	public static final String ABORT_REQUEST     = BOOTLOADER_CMD_HEADER     + ":A";
 	
 	// TODO It's critical for now that both these are multiples of FlashFileOutputStream.DEFAULT_BUFFER_SIZE so that the 
 	// high level flow control doesn't conflict with that inside CrcOutputStream. This restriction can be removed

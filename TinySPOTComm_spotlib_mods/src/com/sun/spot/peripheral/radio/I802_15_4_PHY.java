@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -24,6 +24,8 @@
 
 package com.sun.spot.peripheral.radio;
 
+import com.sun.spot.resources.IResource;
+
 /**
  * Defines the portion of the I802.15.4 PHY layer specification that this library
  * currently supports.
@@ -33,7 +35,7 @@ package com.sun.spot.peripheral.radio;
  *  
  * @see <a href="http://standards.ieee.org/getieee802/index.html">http://standards.ieee.org/getieee802/index.html</a>
  */
-public interface I802_15_4_PHY {
+public interface I802_15_4_PHY extends IResource {
 	
 	// status definitions
 	

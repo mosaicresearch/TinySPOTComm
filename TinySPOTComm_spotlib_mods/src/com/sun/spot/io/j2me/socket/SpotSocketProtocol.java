@@ -34,4 +34,5 @@ interface SpotSocketProtocol {
     
     public static final int IOEXCEPTION = 'e';
     public static final int END_OF_MSG = 'z';
+    public static final int FLUSH = 'f';
 }

@@ -24,8 +24,8 @@
 
 package com.sun.spot.service;
 
-import com.sun.spot.peripheral.ILed;
 import com.sun.spot.peripheral.Spot;
+import com.sun.spot.resources.transducers.ILed;
 import com.sun.spot.util.Utils;
 import com.sun.squawk.VM;
 
@@ -39,7 +39,7 @@ import com.sun.squawk.VM;
  * 
  * @author Ron Goldman
  */
-public class Heartbeat implements IService, Runnable {
+public class Heartbeat extends BasicService implements Runnable {
 
     /** Default period for heartbeat pattern in milliseconds */
     private static final long DEFAULT_HEARTBEAT_PERIOD = 10000;
@@ -54,8 +54,7 @@ public class Heartbeat implements IService, Runnable {
      * Display basic heartbeat every 10 seconds.
      */
     public Heartbeat() {
-        heartbeatPeriod = DEFAULT_HEARTBEAT_PERIOD;
-        activityDecay = 0;
+        init(DEFAULT_HEARTBEAT_PERIOD, 0);
     }
 
     /**
@@ -67,8 +66,7 @@ public class Heartbeat implements IService, Runnable {
         if (period < 500) {
             throw new IllegalArgumentException("Heartbeat period must be greater than 500");
         }
-        heartbeatPeriod = period;
-        activityDecay = 0;
+        init(period, 0);
     }
 
     /**
@@ -88,10 +86,14 @@ public class Heartbeat implements IService, Runnable {
         if (activityDecayPeriod != 0 && activityDecayPeriod < 500) {
             throw new IllegalArgumentException("Heartbeat activity decay period must be greater than 500");
         }
-        heartbeatPeriod = period;
-        activityDecay = activityDecayPeriod;
+        init(period, activityDecayPeriod);
     }
 
+    private void init(long period, long decay) {
+        heartbeatPeriod = period;
+        activityDecay = decay;
+        addTag("service=" + getServiceName());
+    }
 
     /**
      * Heartbeat display loop
@@ -190,31 +192,4 @@ public class Heartbeat implements IService, Runnable {
         return "Heartbeat";
     }
 
-    /**
-     * Assign a new name to this service.
-     * Not settable for heartbeat service.
-     *
-     * @param who ignored
-     */
-    public void setServiceName(String who) {
-    }
-
-    /**
-     * Return whether service is started automatically on reboot.
-     *
-     * @return false
-     */
-    public boolean getEnabled() {
-        return false;
-    }
-
-    /**
-     * Enable/disable whether service is started automatically.
-     * Not settable for heartbeat service.
-     *
-     * @param enable ignored
-     */
-    public void setEnabled(boolean enable) {
-    }
-
-}
+ }

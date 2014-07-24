@@ -76,4 +76,11 @@ public interface ISPI {
      * @param config The configuration of the SPI communications to use for this device.
      */
     void setConfiguration(int config);
+
+	/**
+	 * Pulse SPI chip select line
+	 *
+	 * @param dur Pulse time in microseconds
+	 */
+	void pulse(int dur);
 }

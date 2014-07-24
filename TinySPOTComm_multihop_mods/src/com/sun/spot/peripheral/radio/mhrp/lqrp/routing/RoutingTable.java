@@ -1,5 +1,6 @@
 /*
- * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2010 Oracle. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  *
  * This code is free software; you can redistribute it and/or modify
@@ -17,9 +18,9 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA
  *
- * Please contact Sun Microsystems, Inc., 16 Network Circle, Menlo
- * Park, CA 94025 or visit www.sun.com if you need additional
- * information or have any questions.
+ * Please contact Oracle, 16 Network Circle, Menlo Park, CA 94025 or
+ * visit www.oracle.com if you need additional information or have
+ * any questions.
  */
 
 package com.sun.spot.peripheral.radio.mhrp.lqrp.routing;
@@ -27,23 +28,21 @@ package com.sun.spot.peripheral.radio.mhrp.lqrp.routing;
 import java.util.Enumeration;
 import java.util.Hashtable;
 import java.util.Vector;
-import com.sun.spot.peripheral.radio.mhrp.lqrp.linkParams.ConfigLinkParams;
-import com.sun.spot.peripheral.radio.RadioFactory;
 import com.sun.spot.peripheral.radio.routing.RouteInfo;
-import com.sun.spot.peripheral.radio.routing.SortedList;
 import com.sun.spot.peripheral.radio.mhrp.lqrp.Constants;
 import com.sun.spot.peripheral.radio.mhrp.lqrp.messages.RREP;
 import com.sun.spot.peripheral.radio.mhrp.lqrp.messages.RREQ;
+import com.sun.spot.resources.Resource;
+import com.sun.spot.resources.Resources;
 import com.sun.spot.util.Debug;
 import com.sun.spot.util.IEEEAddress;
-import com.sun.squawk.util.MathUtils;
 
 /**
  * An object that represents a routing table for the mesh
  * @author Allen Ajit George, Jochen Furtmueller, modifications by Pradip De, Pete St. Pierre & Ron Goldman
  * @version 0.1
  */
-public class RoutingTable {
+public class RoutingTable extends Resource {
     
     private final Hashtable table;
     private long ourAddress;
@@ -68,7 +67,11 @@ public class RoutingTable {
      */
     public synchronized static RoutingTable getInstance() {
         if (instance == null) {
-            instance = new RoutingTable();
+            instance = (RoutingTable) Resources.lookup(RoutingTable.class);
+            if (instance == null) {
+                instance = new RoutingTable();
+                Resources.add(instance);
+            }
         }
         return instance;
     }
@@ -87,18 +90,18 @@ public class RoutingTable {
                 // check if entry has expired
                 long now = System.currentTimeMillis();
                 if (entry.expiryTime <= now) {
-                    if ((entry.expiryTime + Constants.DELETE_PERIOD) <= now) {
+                    if (now <= (entry.expiryTime + Constants.DELETE_PERIOD)) {
                         entry.activityFlag = false;
                         Debug.print("[LQRP] clear flag for route to " +
-                                IEEEAddress.toDottedHex(address) +
-                                " through " + IEEEAddress.toDottedHex(entry.nextHopMACAddress) +
+                                IEEEAddress.toDottedHex(address) + " through " +
+                                IEEEAddress.toDottedHex(entry.nextHopMACAddress) +
                                 " at " + now);
                     } else {
-                        Debug.print("[LQRP] remove entry route to   " +
-                                IEEEAddress.toDottedHex(address) +
-                                " through " + IEEEAddress.toDottedHex(entry.nextHopMACAddress) +
+                        table.remove(new Long(address));
+                        Debug.print("[LQRP] remove entry route to " +
+                                IEEEAddress.toDottedHex(address) + " through " +
+                                IEEEAddress.toDottedHex(entry.nextHopMACAddress) +
                                 " at " + now);
-                        table.remove(entry);
                         entry = null;
                     }
                 }
@@ -348,26 +351,21 @@ public class RoutingTable {
         Long wantedAddress = new Long(destination);
         
         RoutingEntry entry;
-        synchronized (table) {
-            entry = (RoutingEntry) table.get(wantedAddress);
-            
-            if (entry != null) {
-                Debug.print("[LQRP] deactivatingRoute (remove entry): " + IEEEAddress.toDottedHex(entry.key.longValue()) +
+        entry = (RoutingEntry) table.remove(wantedAddress);
+        if (entry != null) {
+            Debug.print("[LQRP] deactivatingRoute (remove entry): " + IEEEAddress.toDottedHex(entry.key.longValue()) +
                         " through " + IEEEAddress.toDottedHex(entry.nextHopMACAddress) +
                         " user " + IEEEAddress.toDottedHex(originator) +
                         " at " + System.currentTimeMillis());
-                table.remove(entry.key);
-                // Remove the originator from the route user's list
-//                boolean entryRemoved =
-//                        entry.routeUsers.removeElement(new Long(originator));
-//                if (entryRemoved) {
-//                    Debug.print("deactivateRoute: removed " + IEEEAddress.toDottedHex(originator)
+            // Remove the originator from the route user's list
+//          boolean entryRemoved =
+//                     entry.routeUsers.removeElement(new Long(originator));
+//          if (entryRemoved) {
+//              Debug.print("deactivateRoute: removed " + IEEEAddress.toDottedHex(originator)
 //                    + " from the users list", 1);
-//                }
-            } else {
-                Debug.print("[LQRP] attempt to deactivate missing route to " + destination + " at " + System.currentTimeMillis(), 1);
-            }
-            
+//          }
+        } else {
+            Debug.print("[LQRP] attempt to deactivate missing route to " + destination + " at " + System.currentTimeMillis(), 1);
         }
     }
 
@@ -393,18 +391,23 @@ public class RoutingTable {
     /**
      * This method provides access to the entire routing table. It can be used to
      * monitor the state of the routing table by an application. CAUTION: As this
-     * method accesses a syncronized object, it should not be called to often.
+     * method accesses a synchronized object, it should not be called too often.
+     *
      * @return vector of all routing entries
      */
     public Vector getAllEntries(){
         Vector v = new Vector();
-        Enumeration en = table.elements();
-        while (en.hasMoreElements()){
-            v.addElement(en.nextElement());
+        Enumeration en = table.keys();
+        while (en.hasMoreElements()) {
+            Long addr = (Long) en.nextElement();
+            RoutingEntry re = getEntry(addr.longValue());   // flush expired routes
+            if (re != null) {
+                v.addElement(re);
+            }
         }
         return v;
     }
-            
+
     public void dumpTable() {
         Vector v = getAllEntries();
         System.out.println("Dest\t\tNext Hop\t\tDist\tCost\tActive\tTimeout");

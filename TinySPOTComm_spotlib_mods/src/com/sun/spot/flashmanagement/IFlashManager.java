@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2007-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -26,9 +26,10 @@ package com.sun.spot.flashmanagement;
 
 import java.io.IOException;
 
+import com.sun.spot.resources.IResource;
 import com.sun.squawk.peripheral.InsufficientFlashMemoryException;
 
-interface IFlashManager extends IFAT {
+interface IFlashManager extends IFAT, IResource {
 
 	IAddressableNorFlashSector getExtraSector(FlashFileDescriptor fileDescriptor) throws InsufficientFlashMemoryException;
 

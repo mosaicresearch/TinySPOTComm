@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -24,6 +24,8 @@
 
 package com.sun.spot.peripheral;
 
+import com.sun.spot.resources.IResource;
+
 /**
  * Interface to LTC3455 power control chip on the Spot.
  * This regulates Spot power and charges the battery
@@ -32,7 +34,7 @@ package com.sun.spot.peripheral;
  * @author Syntropy
  */
 
-public interface ILTC3455 {
+public interface ILTC3455 extends IResource {
 
 	/**
 	 * Set high power state. If the Spot is connected to USB and high power

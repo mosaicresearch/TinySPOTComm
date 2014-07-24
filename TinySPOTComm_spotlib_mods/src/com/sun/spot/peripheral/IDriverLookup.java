@@ -24,6 +24,9 @@
 
 package com.sun.spot.peripheral;
 
+/**
+ * @deprecated never used
+ */
 public interface IDriverLookup {
 
 	IDriver getDriverNamed(String driverName);

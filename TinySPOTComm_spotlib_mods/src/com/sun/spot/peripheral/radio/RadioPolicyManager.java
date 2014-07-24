@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -27,9 +27,10 @@ package com.sun.spot.peripheral.radio;
 import java.util.Vector;
 
 import com.sun.spot.peripheral.IDriver;
+import com.sun.spot.resources.Resource;
 
 
-public class RadioPolicyManager implements IRadioPolicyManager, IDriver {
+public class RadioPolicyManager extends Resource implements IRadioPolicyManager, IDriver {
 
 	private short panId;
 	private int channelNumber;
@@ -197,7 +198,9 @@ public class RadioPolicyManager implements IRadioPolicyManager, IDriver {
 	}
 	
 	private void updateRadioState() {
-		if (!connectionsKeepingRadioOn.isEmpty() || (connectionsRequestingRadioOff.isEmpty() && !allConnections.isEmpty())) {
+		if (!connectionsKeepingRadioOn.isEmpty() || 
+            (connectionsRequestingRadioOff.isEmpty() && !allConnections.isEmpty()) ||
+            RadioFactory.isRunningOnHost()) {
 			primTurnRxOn();
 		} else {
 			primTurnRxOff();

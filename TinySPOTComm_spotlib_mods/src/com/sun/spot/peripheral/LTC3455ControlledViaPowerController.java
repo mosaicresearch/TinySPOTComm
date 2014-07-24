@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -24,8 +24,10 @@
 
 package com.sun.spot.peripheral;
 
+import com.sun.spot.resources.Resource;
 
-class LTC3455ControlledViaPowerController implements ILTC3455 {
+
+class LTC3455ControlledViaPowerController extends Resource implements ILTC3455 {
 
 	private IPowerController powerController;
 
@@ -34,20 +36,18 @@ class LTC3455ControlledViaPowerController implements ILTC3455 {
 	}
 
 	public void setHighPower(boolean state) {
-		powerController.setUSBHP(state);
+		powerController.setControl(state ? IPowerController.USB_HIGH_POWER_MODE : IPowerController.USB_LOW_POWER_MODE);
 	}
 
 	public boolean isHighPower() {
-		return powerController.getUSBHP();
+		return (powerController.getControl() & IPowerController.USB_HIGH_POWER_MODE) != 0;
 	}
 
 	public void setSuspended(boolean state) {
-		if (state) {
-			throw new IllegalArgumentException("Cannot suspend USB via power controller");
-		}
+        powerController.setControl(state ? IPowerController.USB_SUSPEND : IPowerController.USB_ENABLE);
 	}
 
 	public boolean isSuspended() {
-		return false;
+        return (powerController.getControl() & IPowerController.USB_SUSPEND) != 0;
 	}
 }

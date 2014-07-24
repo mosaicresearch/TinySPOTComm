@@ -1,5 +1,6 @@
 /*
  * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2010 Oracle. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -17,9 +18,9 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA
  * 
- * Please contact Sun Microsystems, Inc., 16 Network Circle, Menlo
- * Park, CA 94025 or visit www.sun.com if you need additional
- * information or have any questions.
+ * Please contact Oracle, 16 Network Circle, Menlo Park, CA 94025 or
+ * visit www.oracle.com if you need additional information or have
+ * any questions.
  */
 
 package com.sun.squawk.io.j2me.remoteprint;
@@ -51,12 +52,9 @@ import com.sun.squawk.io.ConnectionBase;
  */
 public class Protocol extends ConnectionBase implements RemotePrintConnection {
 
-    private static Hashtable printstreams = new Hashtable();    
-
     private String macAddress;
     private byte portNo;
     private OutputStream out = null;
-    private String key;
 
     /**
      * Open a new "remoteprint" connection to the specified SPOT.
@@ -84,7 +82,6 @@ public class Protocol extends ConnectionBase implements RemotePrintConnection {
                 throw new IllegalArgumentException("Cannot open " + name + ". Port number is invalid");
         }
         // see if connection is already open
-        key = Long.toString(IEEEAddress.toLong(macAddress)) + ":" + Integer.toString(portNo);
         return this;
     }
 
@@ -124,12 +121,7 @@ public class Protocol extends ConnectionBase implements RemotePrintConnection {
      */
     public OutputStream openOutputStream() {
         if (out == null) {
-            out = (OutputStream)printstreams.get(key);
-            if (out == null) {
-                out = new RemotePrintOutputStream(key);
-                printstreams.put(key, out);
-                RemotePrintManager.getInstance().noteRedirection(macAddress);
-            }
+            out = RemotePrintManager.getInstance().openOutputStream(macAddress, portNo);
         }
         return out;
     }

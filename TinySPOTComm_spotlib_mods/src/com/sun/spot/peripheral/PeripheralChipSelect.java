@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -24,38 +24,64 @@
 
 package com.sun.spot.peripheral;
 
-public class PeripheralChipSelect {
+import com.sun.spot.resources.Resource;
+import com.sun.spot.resources.Resources;
+
+public class PeripheralChipSelect extends Resource {
 	
-	public static final PeripheralChipSelect SPI_PCS_0 = new PeripheralChipSelect(0);
-	public static final PeripheralChipSelect SPI_PCS_BD_SEL1 = SPI_PCS_0;
-	public static final PeripheralChipSelect SPI_PCS_1 = new PeripheralChipSelect(1);
-	public static final PeripheralChipSelect SPI_PCS_BD_SEL2 = SPI_PCS_1;
-	public static final PeripheralChipSelect SPI_PCS_2 = new PeripheralChipSelect(2);
-	public static final PeripheralChipSelect SPI_PCS_CC2420 = SPI_PCS_2;
-	public static final PeripheralChipSelect SPI_PCS_3 = new PeripheralChipSelect(3);
-	public static final PeripheralChipSelect SPI_PCS_POWER_CONTROLLER = SPI_PCS_3;
+	public static PeripheralChipSelect SPI_PCS_BD_SEL1() {
+        return (PeripheralChipSelect)Resources.lookup(PeripheralChipSelect.class, "BD_SEL1");
+    }
+	public static PeripheralChipSelect SPI_PCS_BD_SEL2() {
+        return (PeripheralChipSelect)Resources.lookup(PeripheralChipSelect.class, "BD_SEL2");
+    }
+	public static PeripheralChipSelect SPI_PCS_CC2420() {
+        return (PeripheralChipSelect)Resources.lookup(PeripheralChipSelect.class, "CC2420");
+    }
+	public static PeripheralChipSelect SPI_PCS_POWER_CONTROLLER() {
+        return (PeripheralChipSelect)Resources.lookup(PeripheralChipSelect.class, "PCTRL");
+    }
 
 	private int pcsIndex;
+    private String name = null;
 
-	private PeripheralChipSelect(int pcsIndex) {
+    public static final void initPeripheralChipSelect(int hardwareRev) {
+        if (Resources.lookup(PeripheralChipSelect.class, "PCTRL") == null) {
+            if (SPI_PCS_BD_SEL1() == null) {
+                if (hardwareRev <= 6) {
+                    createPCS(0, "BD_SEL1");
+                    createPCS(1, "BD_SEL2");
+                    createPCS(2, "CC2420");
+                    createPCS(3, "PCTRL");
+                } else {
+                    createPCS(0, "PCTRL");
+                    createPCS(1, "BD_SEL1");
+                    createPCS(2, "BD_SEL2");
+                    createPCS(4, "CC2420");
+                }
+            }
+        }
+    }
+
+    private static void createPCS(int index, String name) {
+        PeripheralChipSelect pcs = new PeripheralChipSelect(index, name);
+        pcs.addTag(name);
+        Resources.add(pcs);
+    }
+
+	private PeripheralChipSelect(int pcsIndex, String name) {
 		this.pcsIndex = pcsIndex;
-	}
+		this.name = name;
+    }
 	
 	public int getPcsIndex() {
 		return pcsIndex;
 	}
 	
 	public String toString() {
-		switch (pcsIndex) {
-		case 0:
-			return "PCS_BD_SEL1";
-		case 1:
-			return "PCS_BD_SEL2";
-		case 2:
-			return "PCS_CC2420";
-		case 3:
-			return "PCS_PCTRL";
-		default:
+        if (name != null) {
+            return name;
+        } else {
 			return "PCS_" + pcsIndex;
 		}
 	}

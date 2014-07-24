@@ -26,12 +26,13 @@ package com.sun.spot.flashmanagement;
 
 import com.sun.spot.peripheral.IFlashMemoryDevice;
 import com.sun.spot.peripheral.NorFlashSector;
+import com.sun.spot.resources.Resource;
 
 /**
  * NorFlashSectorFactory
  *
  */
-class NorFlashSectorFactory implements INorFlashSectorFactory {
+class NorFlashSectorFactory extends Resource implements INorFlashSectorFactory {
 
 	private IFlashMemoryDevice device;
 

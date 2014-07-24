@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -24,12 +24,14 @@
 
 package com.sun.spot.peripheral;
 
+import com.sun.spot.resources.Resource;
+
 
 /**
  * A helper class that abstracts the different PIO pin usage of different Spot revisions.<br><br>
  * 
  */
-class SpotPins implements ISpotPins {
+class SpotPins extends Resource implements ISpotPins {
 	
 	private PIOPinDefinition localGreenLEDPin;
 	private PIOPinDefinition localRedLEDPin;
@@ -49,23 +51,30 @@ class SpotPins implements ISpotPins {
 	private PIOPinDefinition USB_HP;
 	private PIOPinDefinition USB_PWR_MON;
 	private PIOPinDefinition ATTENTION_Pin;
+	private PIOPinDefinition LED_MODE_Pin;
+	private PIOPinDefinition LED_BLANK_Pin;
+	private PIOPinDefinition V5_PWR_EN_Pin;
 	
-	static final PIOPinDefinition BD_REV0 = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<22, PIOPin.IO);
-	static final PIOPinDefinition BD_REV1 = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<19, PIOPin.IO);
-	static final PIOPinDefinition BD_REV2 = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<18, PIOPin.IO);
-
     private int[] pins_not_available_to_pio;
 	private ISpot spot;
 
 	SpotPins(int hardwareType, ISpot spot) {
-		pins_not_available_to_pio = new int[] {
-			(hardwareType>5?0:(1<<21)) | (1<<19) | 0x7F | (1<<16) | (1<<17) | (1<<18), 	/* usb pull up pin, usb high power pin, all the SPI pins, pins connected to USART0 */
-			(hardwareType>5?(1<<4):0) | 0xC0300000 | (7 << 15), /* serial pins, top bits missing, P15-17 are board device select */
-			0x00003f80, /* address lines */
-			0xF0000000  /* missing bits */
-		};
 		this.spot = spot;
-		initializePioPins(hardwareType);
+        if (hardwareType < 8) {
+            pins_not_available_to_pio = new int[]{
+               (hardwareType > 5 ? 0 : (1 << 21)) | 0x7F | (1 << 17) | (1 << 18) | (1 << 19) | (1 << 16), /* usb pull up pin, usb high power pin, all the SPI pins, pins connected to USART0 */
+               (hardwareType > 5 ? (1 << 4) : 0) | 0xC0300000 | (7 << 15), /* serial pins, top bits missing, P15-17 are board device select */
+               0x00003f80, /* address lines */
+               0xF0000000  /* missing bits */};
+            initializePioPins(hardwareType);
+        } else {
+            pins_not_available_to_pio = new int[]{      // rev 8 SPOT is different
+               0x0F,        /* SPI0 pins*/
+               0x07000FFF,  /* SPI1 pins, serial pins, device select */
+               0x001F0038,  /* device select */
+               0xFFFFFFFF   /* rev8 ARM9 has no pioD */};
+            initializePioPins8(hardwareType);
+        }
 	}
 
 	public PIOPin getUSB_EN() {
@@ -78,6 +87,18 @@ class SpotPins implements ISpotPins {
 
 	public PIOPin getAttentionPin() {
 		return createPIOPin(ATTENTION_Pin);
+	}
+
+	public PIOPin getLED_BlankPin() {
+		return createPIOPin(LED_BLANK_Pin);
+	}
+
+	public PIOPin getLED_ModePin() {
+		return createPIOPin(LED_MODE_Pin);
+	}
+
+	public PIOPin get5V_PowerEnablePin() {
+		return createPIOPin(V5_PWR_EN_Pin);
 	}
 
 	public PIOPin getUSB_PWR_MON() {
@@ -143,42 +164,30 @@ class SpotPins implements ISpotPins {
 	public PIOPin getTC_TIOB(int tcNum) {
 		return createPIOPin(tc_TIOB[tcNum]);
 	}
-
-	public PIOPin getBD_REV0() {
-		return createPIOPin(BD_REV0);
-	}
-
-	public PIOPin getBD_REV1() {
-		return createPIOPin(BD_REV1);
-	}
-
-	public PIOPin getBD_REV2() {
-		return createPIOPin(BD_REV2);
-	}
-
 	
 	private void initializePioPins(int hardwareType) {
 		ATTENTION_Pin		 = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<28, PIOPin.PERIPHERAL_A);
 		localGreenLEDPin     = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<23, PIOPin.IO);
 		localRedLEDPin       = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<24, PIOPin.IO);
-		SPI_CLK_Pin		     = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<2, PIOPin.IO);
-		SPI_MISO_Pin		 = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<0, PIOPin.IO);
-		SPI_MOSI_Pin		 = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<1, PIOPin.IO);
-		CC2420_RESET_Pin     = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<0, PIOPin.IO);
+		SPI_CLK_Pin		     = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<2,  PIOPin.IO);
+		SPI_MISO_Pin		 = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<0,  PIOPin.IO);
+		SPI_MOSI_Pin		 = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<1,  PIOPin.IO);
+		CC2420_RESET_Pin     = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<0,  PIOPin.IO);
 		CC2420_FIFOP_Pin     = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<23, PIOPin.PERIPHERAL_B);
-		CC2420_FIFO_Pin      = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<2, PIOPin.IO);
+		CC2420_FIFO_Pin      = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<2,  PIOPin.IO);
 		if (hardwareType > 5) {
-			CC2420_SFD_Pin       = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<21, PIOPin.IO);			
+			CC2420_SFD_Pin   = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<21, PIOPin.IO);			
 		} else {
-			CC2420_SFD_Pin       = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<4, PIOPin.IO);
+			CC2420_SFD_Pin   = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<4,  PIOPin.IO);
 		}
-		CC2420_CCA_Pin       = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<3, PIOPin.IO);
-		CC2420_VREG_EN_Pin   = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<1, PIOPin.IO);
+		CC2420_CCA_Pin       = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<3,  PIOPin.IO);
+		CC2420_VREG_EN_Pin   = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<1,  PIOPin.IO);
 		if (hardwareType < 7) {
-			USB_HP			     = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<19, PIOPin.IO);
-			USB_EN			     = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<20, PIOPin.IO);
+			USB_HP			 = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<19, PIOPin.IO);
+			USB_EN			 = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<20, PIOPin.IO);
 		}
 		USB_PWR_MON		     = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<22, PIOPin.IO);
+
 		tc_TIOA = new PIOPinDefinition[6];
 		tc_TIOA[0]           = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<17, PIOPin.PERIPHERAL_B);
 		tc_TIOA[1]           = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<19, PIOPin.PERIPHERAL_B);
@@ -190,8 +199,8 @@ class SpotPins implements ISpotPins {
 		tc_TIOB[0]           = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<18, PIOPin.PERIPHERAL_B);
 		tc_TIOB[1]           = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<20, PIOPin.PERIPHERAL_B);
 		tc_TIOB[2]           = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<22, PIOPin.PERIPHERAL_B);
-		tc_TIOB[3]           = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<7 , PIOPin.PERIPHERAL_B);
-		tc_TIOB[4]           = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<9 , PIOPin.PERIPHERAL_B);
+		tc_TIOB[3]           = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<7,  PIOPin.PERIPHERAL_B);
+		tc_TIOB[4]           = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<9,  PIOPin.PERIPHERAL_B);
 		tc_TIOB[5]           = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<11, PIOPin.PERIPHERAL_B);
 		tc_TCLK = new PIOPinDefinition[6];
 		tc_TCLK[0]           = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<13, PIOPin.PERIPHERAL_B);
@@ -200,9 +209,55 @@ class SpotPins implements ISpotPins {
 		tc_TCLK[3]           = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<27, PIOPin.PERIPHERAL_B);
 		tc_TCLK[4]           = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<28, PIOPin.PERIPHERAL_B);
 		tc_TCLK[5]           = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<29, PIOPin.PERIPHERAL_B);
+
+        LED_MODE_Pin         = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<8,  PIOPin.IO);
+        LED_BLANK_Pin        = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<6,  PIOPin.IO);  // same as TIOA[3]
+        V5_PWR_EN_Pin        = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<11, PIOPin.IO);
+    }
+
+
+	private void initializePioPins8(int hardwareType) {
+		ATTENTION_Pin		 = new PIOPinDefinition(IAT91_PIO.PIOC, 1<<13, PIOPin.PERIPHERAL_A);
+		localGreenLEDPin     = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<27, PIOPin.IO);
+		localRedLEDPin       = new PIOPinDefinition(IAT91_PIO.PIOC, 1<<7,  PIOPin.IO);
+		SPI_CLK_Pin		     = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<2,  PIOPin.IO);   // SPI1 pins
+		SPI_MISO_Pin		 = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<0,  PIOPin.IO);
+		SPI_MOSI_Pin		 = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<1,  PIOPin.IO);
+		CC2420_RESET_Pin     = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<27, PIOPin.IO);
+		CC2420_FIFOP_Pin     = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<23, PIOPin.IO);
+		CC2420_FIFO_Pin      = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<29, PIOPin.IO);
+        CC2420_SFD_Pin       = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<28, PIOPin.IO);
+		CC2420_CCA_Pin       = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<30, PIOPin.IO);
+		CC2420_VREG_EN_Pin   = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<28, PIOPin.IO);
+
+		tc_TIOA = new PIOPinDefinition[6];
+		tc_TIOA[0]           = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<26, PIOPin.PERIPHERAL_A);
+		tc_TIOA[1]           = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<27, PIOPin.PERIPHERAL_A);
+		tc_TIOA[2]           = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<28, PIOPin.PERIPHERAL_A);
+		tc_TIOA[3]           = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<0,  PIOPin.PERIPHERAL_B);
+		tc_TIOA[4]           = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<2,  PIOPin.PERIPHERAL_B);
+		tc_TIOA[5]           = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<3,  PIOPin.PERIPHERAL_B);
+		tc_TIOB = new PIOPinDefinition[6];
+		tc_TIOB[0]           = new PIOPinDefinition(IAT91_PIO.PIOC, 1<<9,  PIOPin.PERIPHERAL_B);
+		tc_TIOB[1]           = new PIOPinDefinition(IAT91_PIO.PIOC, 1<<7,  PIOPin.PERIPHERAL_A);
+		tc_TIOB[2]           = new PIOPinDefinition(IAT91_PIO.PIOC, 1<<6,  PIOPin.PERIPHERAL_A);
+		tc_TIOB[3]           = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<1,  PIOPin.PERIPHERAL_B);
+		tc_TIOB[4]           = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<18, PIOPin.PERIPHERAL_B);
+		tc_TIOB[5]           = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<19, PIOPin.PERIPHERAL_B);
+		tc_TCLK = new PIOPinDefinition[6];
+		tc_TCLK[0]           = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<25, PIOPin.PERIPHERAL_A);
+		tc_TCLK[1]           = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<6,  PIOPin.PERIPHERAL_B);
+		tc_TCLK[2]           = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<7,  PIOPin.PERIPHERAL_B);
+		tc_TCLK[3]           = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<16, PIOPin.PERIPHERAL_B);
+		tc_TCLK[4]           = new PIOPinDefinition(IAT91_PIO.PIOB, 1<<17, PIOPin.PERIPHERAL_B);
+		tc_TCLK[5]           = new PIOPinDefinition(IAT91_PIO.PIOC, 1<<22, PIOPin.PERIPHERAL_B);
+
+        LED_MODE_Pin         = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<7,  PIOPin.IO);
+        LED_BLANK_Pin        = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<26, PIOPin.IO);  // same as TIOA[0]
+        V5_PWR_EN_Pin        = new PIOPinDefinition(IAT91_PIO.PIOA, 1<<10, PIOPin.IO);
 	}
 
-	private synchronized PIOPin createPIOPin(PIOPinDefinition pindef) {
+    private synchronized PIOPin createPIOPin(PIOPinDefinition pindef) {
 		if (pindef == null) {
 			throw new IllegalStateException("Attempt to access non-existent pin");
 		}

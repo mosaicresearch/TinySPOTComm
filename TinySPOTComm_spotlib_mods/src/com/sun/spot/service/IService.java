@@ -24,6 +24,8 @@
 
 package com.sun.spot.service;
 
+import com.sun.spot.resources.IResource;
+
 /**
  * Basic interface supported by all SPOT services so they can be started & stopped
  * from SPOT applications. The intent is that applications can get a long-lived
@@ -49,7 +51,7 @@ package com.sun.spot.service;
  *
  * @author Ron Goldman
  */
-public interface IService {
+public interface IService extends IResource {
 
     /**
      * Service is currently stopped, i.e. not running.

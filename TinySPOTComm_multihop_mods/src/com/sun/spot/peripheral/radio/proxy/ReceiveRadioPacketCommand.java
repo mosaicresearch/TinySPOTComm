@@ -29,7 +29,10 @@ import com.sun.spot.interisolate.ReplyEnvelope;
 import com.sun.spot.peripheral.radio.ConnectionID;
 import com.sun.spot.peripheral.radio.IRadioProtocolManager;
 
-class ReceiveRadioPacketCommand extends RadioRequestEnvelope {
+/**
+ * @deprecated No longer needed: all Isolates now use a global radio resource.
+ */
+ class ReceiveRadioPacketCommand extends RadioRequestEnvelope {
 	private ConnectionID cid;
 	
 	public ReceiveRadioPacketCommand(ConnectionID cid) {

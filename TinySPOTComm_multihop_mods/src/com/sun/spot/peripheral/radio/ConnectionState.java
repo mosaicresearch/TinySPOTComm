@@ -83,7 +83,7 @@ class ConnectionState {
     private IntHashtable retransBuffers = new IntHashtable();
     
     /**
-     * Table of incoming data buffers that might need to be reorderd before 
+     * Table of incoming data buffers that might need to be reordered before
      * putting them in the queue in case of a reliable connection
      */
     IntHashtable reorderTable = new IntHashtable();
@@ -102,7 +102,25 @@ class ConnectionState {
 	}
 	
 	public String toString() {
-		return "Connection state for "+id.toString();
+		return "Connection state for " + id.toString();
+	}
+
+    public String getStatus() {
+        switch (status) {
+            case INTACT:
+				return "open";
+            case CLOSED:
+				return "closed";
+            case NO_ACK:
+				return "NoAckException";
+			case CHANNEL_BUSY:
+				return "ChannelBusyException";
+			case NO_MESHLAYER_ACK:
+				return "NoMeshLayerAckException";
+			case NO_ROUTE:
+				return "NoRouteException";
+        }
+        return "unknown";
 	}
 
 	public int hashCode() {
@@ -220,7 +238,7 @@ class ConnectionState {
 	}
 
 	public boolean close() {
-		status = ConnectionState.CLOSED;
+		status = CLOSED;
 		if (queue != null) {
 			queue.stop();
 		}

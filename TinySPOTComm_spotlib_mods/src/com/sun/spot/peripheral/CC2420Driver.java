@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -27,7 +27,10 @@ package com.sun.spot.peripheral;
 
 public class CC2420Driver {
 	
-	public static final int SPI_CONFIG = (ISpiMaster.CSR_NCPHA | ISpiMaster.CSR_BITS_8 | ISpiMaster.CSR_SCBR_1MHZ);
+	public static final int SPI_CONFIG  = (ISpiMaster.CSR_NCPHA | ISpiMaster.CSR_BITS_8 | ISpiMaster.CSR_SCBR_1MHZ);
+	public static final int SPI_CONFIG8 = (ISpiMaster.CSR_NCPHA | ISpiMaster.CSR_BITS_8 | ISpiMaster.CSR_SCBR8_1MHZ | ISpiMaster.CSR_DLYBCT_64);
+
+	private int FIFOP_INTERRUPT;
 
 	private SpiMaster spi;
 	private SpiPcs ce_pin;
@@ -38,12 +41,12 @@ public class CC2420Driver {
 	private PIOPin fifo_pin;
 	private PIOPin sfd_pin;
 	private PIOPin cca_pin;
-	
-	private AT91_PIO pioA;
-	private AT91_PIO pioB;
-	
-	public CC2420Driver(ISpiMaster spi, SpiPcs ce_pin, ISpotPins spotPins) {
+    private int rev;
+	private IAT91_AIC aic;
+		
+	public CC2420Driver(ISpiMaster spi, SpiPcs ce_pin, ISpotPins spotPins, IAT91_AIC aic) {
 		this.spi = (SpiMaster) spi;
+		this.aic = aic;
 		this.ce_pin = ce_pin;
 		vreg_en_pin = spotPins.getCC2420_VREG_EN_Pin();
 		fifop_pin = spotPins.getCC2420_FIFOP_Pin();
@@ -51,8 +54,8 @@ public class CC2420Driver {
 		sfd_pin = spotPins.getCC2420_SFD_Pin();
 		cca_pin = spotPins.getCC2420_CCA_Pin();
 		reset_pin = spotPins.getCC2420_RESET_Pin();
-		pioA = (AT91_PIO) fifop_pin.pio;
-		pioB = (AT91_PIO) fifo_pin.pio;
+        rev = Spot.getInstance().getHardwareType();
+        FIFOP_INTERRUPT = Spot.getInstance().getAT91_Peripherals().IRQ3_ID_MASK;
 	}
 
 	public void sendAndReceive(int txSize, byte[] tx, int rxOffset, int rxSize, byte[] rx) {
@@ -118,13 +121,13 @@ public class CC2420Driver {
 	 * @return -- the byte of ram read
 	 */
 	public byte receiveRAM(int ramAddress) {
-		byte[] rxBuff = new byte[3];
+		byte[] rxBuff = new byte[1];
 		// First byte:  Send 1 as top bit for RAM Access, plus 7 LSB of address
 		// Second byte: Send 2 MSB of address as top two bits, plus "1" for read in bit 5
 		byte[] txBuff = new byte[]{	(byte)(0x80 | (ramAddress & 0x7F)), 
 									(byte)(((ramAddress & 0x180) >> 1) | 0x20)};
-		sendAndReceive(2, txBuff, 0, 3, rxBuff);
-		return rxBuff[2];
+		spi.sendAndReceive(ce_pin, 2, txBuff, 2, 1, rxBuff);
+		return rxBuff[0];
 	}
 
 	/**
@@ -170,6 +173,30 @@ public class CC2420Driver {
 		reset_pin.setState(b);
 	}
 
+    public void enableFifopInterrupt() {
+        if (rev < 8) {
+            aic.enableIrq(FIFOP_INTERRUPT);
+        } else {
+            fifop_pin.pio.enableIrq(fifop_pin.pin);
+        }
+    }
+
+    public void disableFifopInterrupt() {
+        if (rev < 8) {
+            aic.disableIrq(FIFOP_INTERRUPT);
+        } else {
+            fifop_pin.pio.disableIrq(fifop_pin.pin);
+        }
+    }
+
+    public void waitForFifopInterrupt() throws InterruptedException {
+        if (rev < 8) {
+            aic.waitForInterrupt(FIFOP_INTERRUPT);
+        } else {
+            fifop_pin.pio.waitForIrq(fifop_pin.pin);
+        }
+    }
+
 	public void tearDown() {
 		reset_pin.release();
 		fifo_pin.release();
@@ -192,5 +219,10 @@ public class CC2420Driver {
 		cca_pin.openForInput();
 		sfd_pin.openForInput();
 		reset_pin.setHigh();
+        if (rev < 8) {
+            aic.configure(FIFOP_INTERRUPT, IAT91_AIC.AIC_IRQ_PRI_NORMAL, IAT91_AIC.SRCTYPE_HIGH_LEVEL);
+        } else {
+            fifop_pin.openForInput();
+        }
 	}
 }

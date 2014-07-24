@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -24,12 +24,12 @@
 
 package com.sun.spot.peripheral;
 
+import com.sun.spot.resources.Resource;
 import java.util.Enumeration;
 import java.util.Vector;
 
 import com.sun.spot.util.Utils;
 import com.sun.squawk.Isolate;
-import com.sun.squawk.VM;
 
 /**
  * Acts as a registry for drivers that need to be aware of deep sleep. The Spot singleton holds a singleton
@@ -39,7 +39,7 @@ import com.sun.squawk.VM;
  * by calling add().
  */
 
-public class DriverRegistry implements IDriverRegistry {
+public class DriverRegistry extends Resource implements IDriverRegistry {
 
 	private boolean tracing;
 	private Vector drivers;
@@ -162,6 +162,11 @@ public class DriverRegistry implements IDriverRegistry {
 				Utils.log("Shutting down " + driver.getDriverName());
 			}
 			driver.shutDown();
-		}		
+		}
+        if (Spot.getInstance().getHardwareType() >= 8) {
+            // if power controller is in the process of powering down the ARM then
+            // tell it to turn power off now
+            Spot.getInstance().getPowerController().setShutdownTimeout(0);
+        }
 	}
 }

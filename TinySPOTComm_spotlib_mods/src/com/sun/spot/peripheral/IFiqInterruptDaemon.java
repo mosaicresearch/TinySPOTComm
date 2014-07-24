@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2007-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -24,54 +24,159 @@
 
 package com.sun.spot.peripheral;
 
-public interface IFiqInterruptDaemon {
+import com.sun.spot.resources.IResource;
+
+public interface IFiqInterruptDaemon extends IResource {
+
+    /**
+     * Specify whether the VM should exit when the button is pressed.
+     *
+     * @param enable if true the VM will exit when the button is pressed.
+     */
+    void setExitOnButtonPress(boolean enable);
 
 	/**
-	 * Replace the existing handler for power controller time alarms with a user-supplied handler.
+	 * Add a handler for power controller time alarms.
 	 * It is very unlikely that you will want to create a handler for time alarms.
 	 * The default handler logs a message if spot.diagnostics is set.
-	 * The previous handler is returned, so you can chain your new handler to that one.
 	 * @param handler the new handler to use
-	 * @return the previous handler
+	 */
+	void addAlarmHandler(IEventHandler handler);
+
+	/**
+	 * Remove a handler for power controller time alarms.
+	 * @param handler the new handler to remove
+	 */
+    void removeAlarmHandler(IEventHandler handler);
+
+	/**
+	 * Add a handler for reset button presses.
+	 * The default handler calls VM.stopVM(0).
+	 * @param handler the new handler to use
+	 */
+	void addButtonHandler(IEventHandler handler);
+
+	/**
+	 * Remove a handler for reset button presses.
+	 * @param handler the new handler to remove
+	 */
+    void removeButtonHandler(IEventHandler handler);
+
+	/**
+	 * Add a handler for power off.
+	 * The power off event occurs when the user uses the reset button to turn off
+	 * the SPOT. The handler has about 400ms to do work before the power goes away.
+	 * The default handler does nothing.
+	 * @param handler the new handler to use
+	 */
+	void addPowerOffHandler(IEventHandler handler);
+
+	/**
+	 * Remove a handler for power off.
+	 * @param handler the new handler to remove
+	 */
+    void removePowerOffHandler(IEventHandler handler);
+
+	/**
+	 * Add a handler for low battery warnings.
+	 * The default handler logs a message if spot.diagnostics is set.
+	 * @param handler the new handler to use
+	 */
+	void addLowBatteryHandler(IEventHandler handler);
+
+	/**
+	 * Remove a handler for low battery warnings.
+	 * @param handler the new handler to remove
+	 */
+    void removeLowBatteryHandler(IEventHandler handler);
+
+	/**
+	 * Add a handler for external power applied events.
+	 * The default handler logs a message if spot.diagnostics is set.
+	 * @param handler the new handler to use
+	 */
+	void addExternalPowerHandler(IEventHandler handler);
+
+	/**
+	 * Remove a handler for external power applied events.
+	 * @param handler the new handler to remove
+	 */
+    void removeExternalPowerHandler(IEventHandler handler);
+
+	/**
+	 * Add a handler for sensorboard events.
+	 * The default handler logs a message if spot.diagnostics is set.
+	 * @param handler the new handler to use
+	 */
+    void addSensorBoardHandler(IEventHandler handler);
+
+	/**
+	 * Remove a handler for sensorboard events.
+	 * @param handler the new handler to remove
+	 */
+    void removeSensorBoardHandler(IEventHandler handler);
+
+	/**
+	 * Add a handler for power controller time alarms.
+	 * It is very unlikely that you will want to create a handler for time alarms.
+	 * The default handler logs a message if spot.diagnostics is set.
+	 * The previous handler is no longer returned.
+	 * @param handler the new handler to use
+	 * @return null
+     * @deprecated Please use addAlarmHandler() instead.
 	 */
 	IEventHandler setAlarmHandler(IEventHandler handler);
 
 	/**
-	 * Replace the existing handler for reset button presses with a user-supplied handler.
-	 * The default handler calls VM.stopVM(0). The previous handler is returned, so you
-	 * can chain your new handler to that one.
+	 * Add a handler for reset button presses.
+	 * The default handler calls VM.stopVM(0).
+	 * The previous handler is no longer returned.
 	 * @param handler the new handler to use
-	 * @return the previous handler
+	 * @return null
+     * @deprecated Please use addButtonHandler() instead.
 	 */
 	IEventHandler setButtonHandler(IEventHandler handler);
 
 	/**
-	 * Replace the existing handler for poweroff with a user-supplied handler.
+	 * Add a handler for poweroff.
 	 * The power off event occurs when the user uses the reset button to turn off
 	 * the SPOT. The handler has about 400ms to do work before the power goes away.
 	 * The default handler does nothing.
-	 * The previous handler is returned, so you can chain your new handler to that one.
+	 * The previous handler is no longer returned.
 	 * @param handler the new handler to use
-	 * @return the previous handler
+	 * @return null
+     * @deprecated Please use addPowerOffHandler() instead.
 	 */
 	IEventHandler setPowerOffHandler(IEventHandler handler);
 
 	/**
-	 * Replace the existing handler for low battery warnings with a user-supplied handler.
+	 * Add a handler for low battery warnings.
 	 * The default handler logs a message if spot.diagnostics is set.
-	 * The previous handler is returned, so you can chain your new handler to that one.
+	 * The previous handler is no longer returned.
 	 * @param handler the new handler to use
-	 * @return the previous handler
+	 * @return null
+     * @deprecated Please use addLowBatteryHandler() instead.
 	 */
 	IEventHandler setLowBatteryHandler(IEventHandler handler);
 
 	/**
-	 * Replace the existing handler for external power applied events with a user-supplied handler.
+	 * Add a handler for external power applied events.
 	 * The default handler logs a message if spot.diagnostics is set.
-	 * The previous handler is returned, so you can chain your new handler to that one.
+	 * The previous handler is no longer returned.
 	 * @param handler the new handler to use
-	 * @return the previous handler
+	 * @return null
+     * @deprecated Please use addExternalPowerHandler() instead.
 	 */
 	IEventHandler setExternalPowerHandler(IEventHandler handler);
+
+	/**
+	 * Add a handler for sensorboard events.
+	 * The default handler logs a message if spot.diagnostics is set.
+	 * The previous handler is no longer returned.
+	 * @param handler the new handler to use
+	 * @return null
+     * @deprecated Please use addSensorBoardHandler() instead.
+	 */
+    IEventHandler setSensorBoardHandler(IEventHandler handler);
 
 }

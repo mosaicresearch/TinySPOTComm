@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -90,16 +90,13 @@ public class Receiver extends Thread implements IProtocolManager {
             if (receivedPacket != null) {
                 switch (receivedPacket.message.getType()) {
                     case Constants.RREQ_TYPE:
-                        handleRREQMessage((RREQ) receivedPacket.message,
-                                receivedPacket.messageSender);
+                        handleRREQMessage(receivedPacket);
                         break;
                     case Constants.RREP_TYPE:
-                        handleRREPMessage((RREP) receivedPacket.message,
-                                receivedPacket.messageSender);
+                        handleRREPMessage(receivedPacket);
                         break;
                     case Constants.RERR_TYPE:
-                        handleRERRMessage((RERR) receivedPacket.message,
-                                receivedPacket.messageSender);
+                        handleRERRMessage(receivedPacket);
                     default:
                         break;
                 }
@@ -119,15 +116,23 @@ public class Receiver extends Thread implements IProtocolManager {
      * @param message
      * @param lastHop the node that this message was sent from
      */
-    private void handleRERRMessage(RERR message, long lastHop) {
-//        Debug.print("[AODV] handle RERRMessage from " + new IEEEAddress(lastHop) + " for route to "
-//                + new IEEEAddress(message.getDestAddress()) + " as requested by "
-//                + new IEEEAddress(message.getOrigAddress()) + " at " + System.currentTimeMillis());
-        
-        if (!mhRouteListeners.isEmpty()) {
-            Enumeration en = mhRouteListeners.elements();
-            while (en.hasMoreElements()) {
-                ((IMHEventListener) en.nextElement()).RERRReceived(message.getOrigAddress(), message.getDestAddress());
+    private void handleRERRMessage(ReceivedPacket receivedPacket) {
+        RERR message = (RERR)receivedPacket.message;
+        long lastHop = receivedPacket.messageSender;
+        boolean forward = true;
+//        Debug.print("[AODV] handle RERR message from " + IEEEAddress.toDottedHex(lastHop) + " for route to "
+//                + IEEEAddress.toDottedHex(message.getDestAddress()) + " as requested by "
+//                + IEEEAddress.toDottedHex(message.getOrigAddress()) + " at " + System.currentTimeMillis());
+
+        if (receivedPacket.broadcast) { // ignore RERR message if we are not on that route
+//            System.out.println("[AODV] received broadcast RERR from: " + IEEEAddress.toDottedHex(lastHop));
+            long destinationAddress =
+                (routingTable.getNextHopInfo(message.getOrigAddress())).nextHop;
+            if (destinationAddress == Constants.INVALID_NEXT_HOP) {
+//                System.out.println("[LQRP] Ignoring broadcast RERR message");
+                return;                 // didn't have the route in our table
+            } else {
+                forward = lastHop != destinationAddress;
             }
         }
         routingTable.deactivateRoute(ourAddress, message.getDestAddress());
@@ -136,6 +141,13 @@ public class Receiver extends Thread implements IProtocolManager {
         } else {
             routingTable.deactivateRoute(message.getOrigAddress(), message.getDestAddress());
             sender.forwardAODVMessage(message);
+        }
+
+        if (!mhRouteListeners.isEmpty()) {
+            Enumeration en = mhRouteListeners.elements();
+            while (en.hasMoreElements()) {
+                ((IMHEventListener) en.nextElement()).RERRReceived(message.getOrigAddress(), message.getDestAddress());
+            }
         }
     }
     
@@ -146,23 +158,25 @@ public class Receiver extends Thread implements IProtocolManager {
      * @param message
      * @param lastHop  the node we got this message from
      */
-    private void handleRREPMessage(RREP message, long lastHop) {
-        
+    private void handleRREPMessage(ReceivedPacket receivedPacket) {
+        RREP message = (RREP)receivedPacket.message;
+        long lastHop = receivedPacket.messageSender;
+
 //        Debug.print("[AODV] handle RREPMessage from " + IEEEAddress.toDottedHex(lastHop)
-//        + " for route to " + IEEEAddress.toDottedHex(message.getDestAddress())
-//        + " as requested by " + IEEEAddress.toDottedHex(message.getOrigAddress())
-//        + " at " + System.currentTimeMillis());
+//                + " for route to " + IEEEAddress.toDottedHex(message.getDestAddress())
+//                + " as requested by " + IEEEAddress.toDottedHex(message.getOrigAddress())
+//                + " at " + System.currentTimeMillis());
 
         message.incrementHopCount();
+        if (message.getHopCount() > Constants.NET_DIAMETER) {
+            return;  // Don't forward request
+        }
 
-        if (!mhRouteListeners.isEmpty()) {
-            Enumeration en = mhRouteListeners.elements();
-            while (en.hasMoreElements()) {
-                ((IMHEventListener)
-                en.nextElement()).RREPReceived(message.getOrigAddress(),
-                        message.getDestAddress(),
-                        message.getHopCount());
-            }
+        if (message.getDestAddress() == ourAddress) {
+            Debug.print("handleRREPMessage: received route to self!!! " +
+                        " from " + IEEEAddress.toDottedHex(lastHop) +
+                        " Originator " + IEEEAddress.toDottedHex(message.getOrigAddress()), 1);
+            return;  // ignore messages about routes to ourself
         }
         
         if (message.getOrigAddress() == (long)0xffff) {
@@ -196,7 +210,24 @@ public class Receiver extends Thread implements IProtocolManager {
                 }
             }
         } else if (!rpm.isEndNode()) { // Only forward RREP if not an end node
-            sender.forwardAODVMessage(message);
+            long nextHopAddr = routingTable.getNextHopInfo(message.getOrigAddress()).nextHop;
+            if (nextHopAddr != lastHop) {   // Don't send RREP back to whoever sent it to us
+                sender.forwardAODVMessage(message);
+            } else {
+                Debug.print("[handleRREPMessage] RREP loop to " +
+                        IEEEAddress.toDottedHex(message.getOrigAddress()) +
+                        " from " + IEEEAddress.toDottedHex(lastHop), 1);
+            }
+        }
+
+        if (!mhRouteListeners.isEmpty()) {
+            Enumeration en = mhRouteListeners.elements();
+            while (en.hasMoreElements()) {
+                ((IMHEventListener)
+                en.nextElement()).RREPReceived(message.getOrigAddress(),
+                        message.getDestAddress(),
+                        message.getHopCount());
+            }
         }
     }
     
@@ -206,7 +237,9 @@ public class Receiver extends Thread implements IProtocolManager {
      * @param message
      * @param lastHop
      */
-    private void handleRREQMessage(RREQ message, long lastHop) {
+    private void handleRREQMessage(ReceivedPacket receivedPacket) {
+        RREQ message = (RREQ)receivedPacket.message;
+        long lastHop = receivedPacket.messageSender;
 //        Debug.print("[AODV] handle RREQMessage from " + IEEEAddress.toDottedHex(lastHop) + " for route to "
 //                + IEEEAddress.toDottedHex(message.getDestAddress()) + " as requested by "
 //                + IEEEAddress.toDottedHex(message.getOrigAddress()) + " at " + System.currentTimeMillis());
@@ -229,14 +262,6 @@ public class Receiver extends Thread implements IProtocolManager {
             return;     // ignore repeat requests during grace period after active period has expired
         }
 
-        if (!mhRouteListeners.isEmpty()) {
-            Enumeration en = mhRouteListeners.elements();
-            while (en.hasMoreElements()) {
-                ((IMHEventListener) en.nextElement()).RREQReceived(message.getOrigAddress(), message.getDestAddress(),
-                        message.getHopCount());
-            }
-        }
-
         requestTable.addRREQ(message, null, null);
         routingTable.addRoute(lastHop, lastHop, 1, 1, Constants.UNKNOWN_SEQUENCE_NUMBER);
         routingTable.addRoute(lastHop, message);
@@ -256,6 +281,14 @@ public class Receiver extends Thread implements IProtocolManager {
             }
         } else if (!rpm.isEndNode()) {// Only forward RREQ if not an end node
             sender.forwardAODVMessage(message);
+        }
+
+        if (!mhRouteListeners.isEmpty()) {
+            Enumeration en = mhRouteListeners.elements();
+            while (en.hasMoreElements()) {
+                ((IMHEventListener) en.nextElement()).RREQReceived(message.getOrigAddress(), message.getDestAddress(),
+                        message.getHopCount());
+            }
         }
     }
     
@@ -289,10 +322,10 @@ public class Receiver extends Thread implements IProtocolManager {
 //                Debug.print("receiveData: RERR from "
 //                        + IEEEAddress.toDottedHex(headerInfo.sourceAddress), 1);
                 RERR rerrMessage = new RERR(payload);
-                messageQueue.put(new ReceivedPacket(rerrMessage, headerInfo.sourceAddress));
+                messageQueue.put(new ReceivedPacket(rerrMessage, headerInfo.sourceAddress, headerInfo.destinationAddress == 0xffff));
                 break;
             default:
-                System.err.println("receiveData: bad packet from"
+                System.err.println("[AODV] processIncomingData: bad packet from"
                         + IEEEAddress.toDottedHex(headerInfo.sourceAddress));
                 break;
         }
@@ -302,9 +335,17 @@ public class Receiver extends Thread implements IProtocolManager {
         public ReceivedPacket(AODVMessage message, long messageSender) {
             this.message = message;
             this.messageSender = messageSender;
+            this.broadcast = false;
         }
         
+        public ReceivedPacket(AODVMessage message, long messageSender, boolean broadcast) {
+            this.message = message;
+            this.messageSender = messageSender;
+            this.broadcast = broadcast;
+        }
+
         public AODVMessage message;
         public long messageSender;
+        public boolean broadcast;
     }
 }

@@ -18,9 +18,7 @@ package com.sun.spot.peripheral.radio.proxy;
 
 import com.sun.spot.interisolate.ReplyEnvelope;
 import com.sun.spot.peripheral.radio.ConnectionID;
-import com.sun.spot.peripheral.radio.IRadiogramProtocolManager;
 import com.sun.spot.peripheral.radio.ITinyOSRadioProtocolManager;
-import com.sun.spot.peripheral.radio.proxy.ProxyRadioProtocolManager;
 
 /**
  * @author Daniel van den Akker

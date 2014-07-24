@@ -55,12 +55,19 @@ public interface IBattery {
 	public static final byte CHARGING = 4;
 	public static final byte EXT_POWERED = 5;
 	public static final byte OUT_OF_RANGE_TEMP = 6;
+	public static final byte FULL_CHARGE = 7;
 	/*
 	 * Indices for long array returned by getTime()
 	 */
 	public static final int SLEEPTIME = 0;
 	public static final int RUNTIME = 1;
 	public static final int CHARGETIME = 2;
+	/*
+	 * bit field mask for getFlags() 
+	 */
+	public static final byte TEMP_SENSOR_DETECTED = 1;
+	public static final byte BATTERY_DETECTED = 2;
+	public static final byte CYCLE_DETECTED = 4;
 
 	/**
 	 * Battery model must match battery used for accurate measurements.
@@ -176,5 +183,35 @@ public interface IBattery {
 	 * @throws IOException if the power controller does not respond within 10 seconds
 	 */
 	void updatePersistantInfo() throws IOException;
+	/**
+	 * return the time the SPOT has been asleep since last charge
+	 * @return sleep time in milliseconds
+	 */
+	
+	int getSleepTime();
+	
 
+	/**
+	 * return the time the SPOT has been running since last charge
+	 * @return run time in milliseconds
+	 */
+	
+	int getRunTime();
+	
+	/**
+	 * return the time the SPOT has been charging 
+	 * @return charge time in milliseconds
+	 */
+	
+	int getChargeTime();
+
+	/**
+	 * reset charge, run and sleep accumulation timers to zero 
+	 */	
+	void resetBatteryTimers();
+	/**
+	 * return the flag bitfield 
+	 * @return charge time in milliseconds
+	 */
+	byte getFlags();
 }

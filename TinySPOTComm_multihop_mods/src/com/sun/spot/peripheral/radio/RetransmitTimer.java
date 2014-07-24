@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2009 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -33,6 +33,7 @@ public class RetransmitTimer extends TimerTask {
     private byte seqNo;
     private RadiostreamProtocolManager spm;
     private ConnectionState cs;
+    private boolean showAllTimeouts = false;
     
     /** Creates a new instance of RetransmitTimer */
     public RetransmitTimer(byte seqNo, ConnectionState cs, RadiostreamProtocolManager spm) {
@@ -48,10 +49,10 @@ public class RetransmitTimer extends TimerTask {
     public void run(){
         RetransmitBuffer rb = cs.getRetransBuffer(seqNo);
         if (rb != null) {
-        	Debug.print("[Radiostream] RetransmitTimer expired for " + cs + " seq=" + (seqNo & 0xff) + " at " + System.currentTimeMillis());
+        	spm.log("[Radiostream] RetransmitTimer expired for " + cs + " seq=" + (seqNo & 0xff) + " at " + System.currentTimeMillis());
             spm.retransmit(rb, cs, ConnectionState.NO_MESHLAYER_ACK);
-        } else {
-        	Debug.print("[Radiostream] RetransmitTimer expired for " + cs + " seq=" + (seqNo & 0xff) + " with no RetransmitBuffer at " + System.currentTimeMillis());
+        } else if (showAllTimeouts) {
+        	spm.log("[Radiostream] RetransmitTimer expired for " + cs + " seq=" + (seqNo & 0xff) + " with no RetransmitBuffer at " + System.currentTimeMillis());
         }
     }
 }

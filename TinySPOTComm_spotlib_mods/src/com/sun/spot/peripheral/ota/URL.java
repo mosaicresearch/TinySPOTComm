@@ -28,9 +28,9 @@ import com.sun.squawk.util.StringTokenizer;
 import java.util.Vector;
 
 /**
- * Privide a string of the form 
- *  "protocolName://address:port/rest1/rest2/.../restN" 
- * WARNING currnelty the above for is REQUIRED, i.e., there must be a port, for example.
+ * Provide a string of the form <br>
+ *  "protocolName://address:port/rest1/rest2/.../restN" <br>
+ * WARNING currently the above format is REQUIRED, i.e., there must be a port, for example.
  *  
  * @author randy
  */

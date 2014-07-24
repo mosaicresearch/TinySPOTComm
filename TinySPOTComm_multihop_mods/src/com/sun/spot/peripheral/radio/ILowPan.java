@@ -1,5 +1,5 @@
 /*
- * Copyright 2005-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2005-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -29,6 +29,7 @@ import com.sun.spot.peripheral.NoAckException;
 import com.sun.spot.peripheral.NoRouteException;
 import com.sun.spot.peripheral.radio.mhrp.interfaces.IMHEventListener;
 import com.sun.spot.peripheral.radio.routing.interfaces.IRoutingManager;
+import com.sun.spot.service.IService;
 
 /**
  * Interface that specifies the minimum functionality offered by a layer that
@@ -37,7 +38,7 @@ import com.sun.spot.peripheral.radio.routing.interfaces.IRoutingManager;
  * @author Allen Ajit George
  * @version 0.1
  */
-public interface ILowPan {
+public interface ILowPan extends IService {
     /**
      * Minimum length of the LowPan header
      */

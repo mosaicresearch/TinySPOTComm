@@ -88,7 +88,7 @@ public interface IAT91_AIC extends IDriver {
 
 	/**
 	 * Configure an interrupt for java handling.
-	 * @see IAT91_Peripherals for constants that define the interrupts.
+	 * @see AT91_Peripherals for constants that define the interrupts.
 	 * Select one of the modes defined by the SRCTYPE constants in this file
 	 * @param irq irq mask (ie one bit set according to which interrupt we are handling)
 	 * @param pri priority (0 to 7, with 7 being the highest)

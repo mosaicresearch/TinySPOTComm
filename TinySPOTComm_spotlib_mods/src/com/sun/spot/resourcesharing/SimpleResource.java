@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2007-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -28,7 +28,9 @@ package com.sun.spot.resourcesharing;
  * A simple implementation of the {@link IResource} interface that can be used as it is, or 
  * extended for a more complex use. By default uses {@link SimpleResourceHandle}: if
  * an extension needs to use a different {@link IResourceHandle} then it should override
- * {@link #createNewHandle()}. 
+ * {@link #createNewHandle()}.
+ *
+ * @deprecated  As of v6.0 (Yellow), replaced by {@link com.sun.spot.resources}
  */
 public class SimpleResource implements IResource {
 	private String name;

@@ -30,7 +30,7 @@ package com.sun.spot.service;
  *
  * @author Ron Goldman
  */
-public interface ISpotBlink {
+public interface ISpotBlink extends IService {
 
     /**
      * Do the default Blink action.

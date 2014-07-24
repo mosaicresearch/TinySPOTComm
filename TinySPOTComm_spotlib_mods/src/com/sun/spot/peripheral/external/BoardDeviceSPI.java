@@ -82,4 +82,8 @@ public class BoardDeviceSPI implements ISPI {
 	public void setConfiguration(int config) {
 		cs_pin.setConfiguration(config);
 	}
+
+	public void pulse(int dur) {
+        spi.pulse(cs_pin, deviceAddress, dur);
+    }
 }

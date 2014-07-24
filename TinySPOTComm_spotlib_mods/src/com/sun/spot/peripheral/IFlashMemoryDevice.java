@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -24,6 +24,7 @@
 
 package com.sun.spot.peripheral;
 
+import com.sun.spot.resources.IResource;
 
 /**
  * Interface to flash memory devices on the main Spot board and external boards.
@@ -44,7 +45,7 @@ package com.sun.spot.peripheral;
  * @author Syntropy
  */
 
-public interface IFlashMemoryDevice {
+public interface IFlashMemoryDevice extends IResource {
 
 	/**
 	 * Read data from the flash memory.

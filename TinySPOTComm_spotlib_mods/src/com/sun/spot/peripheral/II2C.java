@@ -1,5 +1,5 @@
 /*
- * Copyright 2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2008-2009 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  *
  * This code is free software; you can redistribute it and/or modify
@@ -24,6 +24,7 @@
 
 package com.sun.spot.peripheral;
 
+import com.sun.spot.resources.IResource;
 import java.io.IOException;
 
 /**
@@ -31,7 +32,7 @@ import java.io.IOException;
  *
  * @author Ron Goldman
  */
-public interface II2C {
+public interface II2C extends IResource {
 
     /**
      * Initialize the I2C hardware.

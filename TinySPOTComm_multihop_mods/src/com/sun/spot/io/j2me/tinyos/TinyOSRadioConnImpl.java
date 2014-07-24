@@ -24,6 +24,7 @@ import java.io.IOException;
 import javax.microedition.io.Connection;
 import javax.microedition.io.Datagram;
 
+import com.sun.spot.io.j2me.radiostream.RadiostreamConnection;
 import com.sun.spot.peripheral.ChannelBusyException;
 import com.sun.spot.peripheral.NoAckException;
 import com.sun.spot.peripheral.NoRouteException;
@@ -118,7 +119,7 @@ public class TinyOSRadioConnImpl extends RadioConnectionBase implements TinyOSRa
 			}
 			else
 			{
-				long macAddress = new IEEEAddress(addr).asLong();
+				long macAddress = IEEEAddress.toLong(addr);
 				sendConnectionID = getProtocolManager().addOutputConnection(macAddress, portNo);
 				receiveConnectionID = getProtocolManager().addInputConnection(macAddress, portNo);
 			}

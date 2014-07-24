@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -41,23 +41,34 @@ class AT91_PowerManager implements IAT91_PowerManager {
 	private static final int CKGR_PLLBR = 0x2C >> 2;
 
 	private int normalPLLBRegisterValue = Unsafe.getInt(Address.fromPrimitive(BASE_ADDR), CKGR_PLLBR);
-	
+
+    private AT91_Peripherals spotMasks;
+
+    public AT91_PowerManager() {
+        int mclk = Spot.getInstance().getMclkFrequency();
+        PERIPHERAL_BUS_SPEEDS[0] = mclk;
+        PERIPHERAL_BUS_SPEEDS[1] = mclk * 3/4;
+        PERIPHERAL_BUS_SPEEDS[2] = 18432000;
+        PERIPHERAL_BUS_SPEEDS[3] = 18432000/2;
+        spotMasks = Spot.getInstance().getAT91_Peripherals();
+    }
+
 	public void enablePeripheralClock(int mask) {
-		if ((IAT91_Peripherals.PERIPHERALS_ACCESSIBLE_FROM_JAVA & mask) == 0) {
+		if ((spotMasks.PERIPHERALS_ACCESSIBLE_FROM_JAVA & mask) == 0) {
 			throw new SpotFatalException("The peripheral with mask " + mask + " is not accessible from Java");
 		}
 		Unsafe.setInt(Address.fromPrimitive(BASE_ADDR), PS_PCER, mask);		
 	}
 
 	public void disablePeripheralClock(int mask) {
-		if ((IAT91_Peripherals.PERIPHERALS_ACCESSIBLE_FROM_JAVA & mask) == 0) {
+		if ((spotMasks.PERIPHERALS_ACCESSIBLE_FROM_JAVA & mask) == 0) {
 			throw new SpotFatalException("The peripheral with mask " + mask + " is not accessible from Java");
 		}
 		Unsafe.setInt(Address.fromPrimitive(BASE_ADDR), PS_PCDR, mask);		
 	}
 
 	public int getEnabledPeripheralClocks() {
-		return Unsafe.getInt(Address.fromPrimitive(BASE_ADDR), PS_PCSR) & IAT91_Peripherals.PERIPHERALS_ACCESSIBLE_FROM_JAVA;
+		return Unsafe.getInt(Address.fromPrimitive(BASE_ADDR), PS_PCSR) & spotMasks.PERIPHERALS_ACCESSIBLE_FROM_JAVA;
 	}
 	
 	public String getDriverName() {
@@ -66,7 +77,7 @@ class AT91_PowerManager implements IAT91_PowerManager {
 
 	public boolean tearDown() {
 		int enabledPeripheralClocks = getEnabledPeripheralClocks();
-		Utils.log(getDriverName() + ": Enabled clocks are " + enabledPeripheralClocks);
+		Utils.log(getDriverName() + ": Enabled clocks are " + Integer.toHexString(enabledPeripheralClocks));
 		return enabledPeripheralClocks == 0;
 	}
 
@@ -77,23 +88,23 @@ class AT91_PowerManager implements IAT91_PowerManager {
 	}
 
 	public void setUsbEnable(boolean enable) {
-		boolean currentlyEnabled = (Unsafe.getInt(Address.fromPrimitive(BASE_ADDR), PS_PCSR) & IAT91_Peripherals.UDP_ID_MASK) != 0;
+		boolean currentlyEnabled = (Unsafe.getInt(Address.fromPrimitive(BASE_ADDR), PS_PCSR) & spotMasks.UDP_ID_MASK) != 0;
 		
 		if (enable && !currentlyEnabled) {
 			Unsafe.setInt(Address.fromPrimitive(BASE_ADDR), CKGR_PLLBR, normalPLLBRegisterValue);
 			while ((Unsafe.getInt(Address.fromPrimitive(BASE_ADDR), PMC_SR) & 1<<2) == 0);
-			Unsafe.setInt(Address.fromPrimitive(BASE_ADDR), PS_PCER, IAT91_Peripherals.UDP_ID_MASK);
+			Unsafe.setInt(Address.fromPrimitive(BASE_ADDR), PS_PCER, spotMasks.UDP_ID_MASK);
 		} else if (!enable && currentlyEnabled) {
-			Unsafe.setInt(Address.fromPrimitive(BASE_ADDR), PS_PCDR, IAT91_Peripherals.UDP_ID_MASK);
+			Unsafe.setInt(Address.fromPrimitive(BASE_ADDR), PS_PCDR, spotMasks.UDP_ID_MASK);
 			Unsafe.setInt(Address.fromPrimitive(BASE_ADDR), CKGR_PLLBR, 0);
 		}
 	}
 
 	public void setUsartEnable(boolean enable) {
 		if (enable) {
-			Unsafe.setInt(Address.fromPrimitive(BASE_ADDR), PS_PCER, IAT91_Peripherals.US0_ID_MASK | IAT91_Peripherals.US1_ID_MASK);		
+			Unsafe.setInt(Address.fromPrimitive(BASE_ADDR), PS_PCER, spotMasks.US0_ID_MASK | spotMasks.US1_ID_MASK);
 		} else {
-			Unsafe.setInt(Address.fromPrimitive(BASE_ADDR), PS_PCDR, IAT91_Peripherals.US0_ID_MASK | IAT91_Peripherals.US1_ID_MASK);		
+			Unsafe.setInt(Address.fromPrimitive(BASE_ADDR), PS_PCDR, spotMasks.US0_ID_MASK | spotMasks.US1_ID_MASK);
 		}
 	}
 

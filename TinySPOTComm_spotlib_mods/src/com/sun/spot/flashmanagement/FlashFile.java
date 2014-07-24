@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2007-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -26,11 +26,12 @@ package com.sun.spot.flashmanagement;
 
 import java.io.IOException;
 
-import com.sun.spot.globals.SpotGlobals;
 import com.sun.spot.peripheral.ConfigPage;
 import com.sun.spot.peripheral.Spot;
 import com.sun.spot.peripheral.SpotFatalException;
 import com.sun.spot.peripheral.radio.RadioFactory;
+import com.sun.spot.resources.IResource;
+import com.sun.spot.resources.Resources;
 import com.sun.squawk.peripheral.InsufficientFlashMemoryException;
 
 /**
@@ -69,17 +70,7 @@ import com.sun.squawk.peripheral.InsufficientFlashMemoryException;
  */
 public class FlashFile {
 	
-	/**
-	 * The index used with SpotGlobals to access the globally shared FlashManager
-	 */
-	public static final int SPOT_GLOBAL_FLASH_MANAGER = 1;
-	
-	/**
-	 * The index used with SpotGlobals to access the globally shared NorFlashSectorFactory
-	 */
-	public static final int SPOT_GLOBAL_NOR_FLASH_SECTOR_FACTORY = 2;
-
-        /**
+    /**
 	 * The size of the virtual address space allocated to a mapped file
 	 */
 	public static final int VIRTUAL_ADDRESS_FILE_SPACING = 1024*1024;
@@ -111,11 +102,24 @@ public class FlashFile {
 	 * @throws IOException
 	 */
 	public static void setNorFlashSectorFactory(INorFlashSectorFactory norFlashSectorFactory) throws IOException {
-		synchronized (SpotGlobals.getMutex()) {
-			SpotGlobals.setGlobal(SPOT_GLOBAL_NOR_FLASH_SECTOR_FACTORY, norFlashSectorFactory);
-			SpotGlobals.setGlobal(SPOT_GLOBAL_FLASH_MANAGER, null);
-		}
+        IResource res = Resources.lookup(INorFlashSectorFactory.class);
+        if (res != null) {
+            Resources.remove(res);
+        }
+        res = Resources.lookup(IFlashManager.class);
+        if (res != null) {
+            Resources.remove(res);
+        }
+        Resources.add(norFlashSectorFactory);
 	}
+
+    /**
+     * Force the FlashManager to refetch the FAT, which may have been updated by the OTACommandProcessor
+     */
+	public static void refetchFAT() {
+        IResource theFlashManager = Resources.lookup(IFlashManager.class);
+        Resources.remove(theFlashManager);
+    }
 
 	/**
 	 * Overwrite the existing FAT with a new empty one. Use with care as existing FlashFiles will be
@@ -124,13 +128,8 @@ public class FlashFile {
 	 * @throws IOException
 	 */
 	public static void resetFAT() throws IOException {
-		synchronized (SpotGlobals.getMutex()) {
-			int highestSectorNumberKnownOnDevice = ConfigPage.LAST_COMMON_FILE_SYSTEM_SECTOR;
-				
-			FlashManager theFlashManager = new FlashManager(ConfigPage.FIRST_FILE_SYSTEM_SECTOR, highestSectorNumberKnownOnDevice);
-			theFlashManager.initFilingSystem(getNorFlashSectorFactory());
-			SpotGlobals.setGlobal(SPOT_GLOBAL_FLASH_MANAGER, theFlashManager);
-		}
+        FlashManager theFlashManager = (FlashManager)getFlashManagerAux(false);
+        theFlashManager.initFilingSystem(getNorFlashSectorFactory());
 	}
 
 	/**
@@ -373,23 +372,25 @@ public class FlashFile {
 	}
 	
 	static IFlashManager getFlashManager() {
-		IFlashManager theFlashManager;
-		synchronized (SpotGlobals.getMutex()) {
-			theFlashManager = (IFlashManager) SpotGlobals.getGlobal(SPOT_GLOBAL_FLASH_MANAGER);
-			if (theFlashManager == null) {
-				try {
-					int highestSectorNumberKnownOnDevice = (RadioFactory.isRunningOnHost()) ?  
-							ConfigPage.LAST_COMMON_FILE_SYSTEM_SECTOR :
-							Spot.getInstance().getFlashMemoryDevice().getLastSectorAvailableToJava();
-						
-					theFlashManager = new FlashManager(ConfigPage.FIRST_FILE_SYSTEM_SECTOR, highestSectorNumberKnownOnDevice);
-					((FlashManager) theFlashManager).initFromStoredFAT(getNorFlashSectorFactory());
-					SpotGlobals.setGlobal(SPOT_GLOBAL_FLASH_MANAGER, theFlashManager);
-				} catch (IOException e) {
-					throw new SpotFatalException("Unexpected IOException while creating FlashManager");
-				}
-			}
-		}		
+        return getFlashManagerAux(true);
+    }
+
+    private static IFlashManager getFlashManagerAux(boolean init) {
+		IFlashManager theFlashManager = (IFlashManager) Resources.lookup(IFlashManager.class);
+        if (theFlashManager == null) {
+            try {
+                int hardwareRev = RadioFactory.getHardwareRevision();
+                int firstSectorNumberKnownOnDevice = ConfigPage.getFirstFileSystemSector(hardwareRev);
+                int highestSectorNumberKnownOnDevice = ConfigPage.getLastFileSystemSector(hardwareRev);
+                theFlashManager = new FlashManager(firstSectorNumberKnownOnDevice, highestSectorNumberKnownOnDevice);
+                if (init) {
+                    ((FlashManager) theFlashManager).initFromStoredFAT(getNorFlashSectorFactory());
+                }
+                Resources.add(theFlashManager);
+            } catch (IOException e) {
+                throw new SpotFatalException("Unexpected IOException while creating FlashManager");
+            }
+        }
 		return theFlashManager;
 	}
 	
@@ -398,13 +399,10 @@ public class FlashFile {
 	}
 
 	private static INorFlashSectorFactory getNorFlashSectorFactory() {
-		INorFlashSectorFactory norFlashSectorFactory;
-		synchronized (SpotGlobals.getMutex()) {
-			norFlashSectorFactory = (INorFlashSectorFactory) SpotGlobals.getGlobal(SPOT_GLOBAL_NOR_FLASH_SECTOR_FACTORY);
-			if (norFlashSectorFactory == null) {
-				norFlashSectorFactory = new NorFlashSectorFactory(Spot.getInstance().getFlashMemoryDevice());
-				SpotGlobals.setGlobal(SPOT_GLOBAL_NOR_FLASH_SECTOR_FACTORY, norFlashSectorFactory);
-			}
+		INorFlashSectorFactory norFlashSectorFactory = (INorFlashSectorFactory) Resources.lookup(INorFlashSectorFactory.class);
+        if (norFlashSectorFactory == null) {
+            norFlashSectorFactory = new NorFlashSectorFactory(Spot.getInstance().getFlashMemoryDevice());
+            Resources.add(norFlashSectorFactory);
 		}		
 		return norFlashSectorFactory;
 	}

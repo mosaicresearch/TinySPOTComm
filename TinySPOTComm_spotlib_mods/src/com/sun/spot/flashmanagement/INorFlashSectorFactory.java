@@ -24,6 +24,8 @@
 
 package com.sun.spot.flashmanagement;
 
+import com.sun.spot.resources.IResource;
+
 
 /**
  * INorFlashSectorFactory creates instances of {@link IAddressableNorFlashSector}.
@@ -31,7 +33,7 @@ package com.sun.spot.flashmanagement;
  * from outside the com.sun.spot.flashmanagement package.
  *
  */
-public interface INorFlashSectorFactory {
+public interface INorFlashSectorFactory extends IResource {
 
 	/**
 	 * Create an {@link IAddressableNorFlashSector}

@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright 2006-2010 Sun Microsystems, Inc. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
  * 
  * This code is free software; you can redistribute it and/or modify
@@ -24,7 +24,9 @@
 
 package com.sun.spot.peripheral.radio;
 
-public interface IRadioPolicyManager {
+import com.sun.spot.resources.IResource;
+
+public interface IRadioPolicyManager extends IResource {
 
 	/**
 	 * Default PAN id to use.
